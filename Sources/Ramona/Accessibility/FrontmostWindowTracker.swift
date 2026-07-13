@@ -133,6 +133,48 @@ final class FrontmostWindowTracker {
         )
     }
 
+    /// One-off spatial lookup (unlike the live frontmost-window tracking
+    /// above) - used when the user drops the cat on an arbitrary screen
+    /// point (Phase 4), which may not belong to the frontmost app at all.
+    static func windowFrame(atScreenPoint point: CGPoint) -> CGRect? {
+        guard let primaryScreenHeight = NSScreen.screens.first(where: { $0.frame.origin == .zero })?.frame.height else {
+            return nil
+        }
+        // AX screen-position queries use top-left-origin coordinates, like
+        // kAXPositionAttribute in cocoaFrame(of:) - flip from Cocoa's
+        // bottom-left origin.
+        let axPoint = CGPoint(x: point.x, y: primaryScreenHeight - point.y)
+
+        var element: AXUIElement?
+        guard AXUIElementCopyElementAtPosition(AXUIElementCreateSystemWide(), Float(axPoint.x), Float(axPoint.y), &element) == .success,
+              let hitElement = element else { return nil }
+
+        // The hit element is often a child (button, text field...) - walk
+        // up to its containing window.
+        var current = hitElement
+        var depth = 0
+        while role(of: current) != (kAXWindowRole as String) {
+            depth += 1
+            guard depth < 20, let parentElement = parent(of: current) else { return nil }
+            current = parentElement
+        }
+
+        return cocoaFrame(of: current)
+    }
+
+    private static func role(of element: AXUIElement) -> String? {
+        var value: AnyObject?
+        guard AXUIElementCopyAttributeValue(element, kAXRoleAttribute as CFString, &value) == .success else { return nil }
+        return value as? String
+    }
+
+    private static func parent(of element: AXUIElement) -> AXUIElement? {
+        var value: AnyObject?
+        guard AXUIElementCopyAttributeValue(element, kAXParentAttribute as CFString, &value) == .success,
+              let value else { return nil }
+        return (value as! AXUIElement)
+    }
+
     private static let axCallback: AXObserverCallback = { _, _, notification, refcon in
         guard let refcon else { return }
         let tracker = Unmanaged<FrontmostWindowTracker>.fromOpaque(refcon).takeUnretainedValue()

@@ -17,6 +17,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         startBehaviorEngine()
         observeScreenLock()
         startAccessibilityFlow()
+
+        DebugSettings.shared.onChange = { [weak self] visible in
+            self?.overlayWindowController?.catScene.setDebugVisible(visible)
+        }
     }
 
     func applicationWillTerminate(_ notification: Notification) {
@@ -29,11 +33,34 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private func startBehaviorEngine() {
         let species = SpeciesDefinition.loadRamona()
         let engine = BehaviorEngine(species: species, saveState: CatSaveState.load())
-        engine.onStateChange = { [weak self] action, mood in
-            self?.overlayWindowController?.catScene.apply(action: action, mood: mood)
+        engine.onStateChange = { [weak self, weak engine] action, mood in
+            guard let engine else { return }
+            self?.overlayWindowController?.catScene.apply(action: action, mood: mood, needs: engine.needs)
         }
         engine.start()
         behaviorEngine = engine
+
+        wireCatInteraction(to: engine)
+    }
+
+    /// Phase 4: petting and mood-gated pickup, wired through to the same
+    /// engine that owns needs/mood - see BehaviorEngine.pet/toleratesHold.
+    private func wireCatInteraction(to engine: BehaviorEngine) {
+        let scene = overlayWindowController?.catScene
+        scene?.onPet = { [weak engine] in
+            engine?.pet()
+        }
+        scene?.onHoldRequested = { [weak engine] in
+            guard let engine, engine.toleratesHold else { return false }
+            engine.pause()
+            return true
+        }
+        scene?.onDropped = { [weak scene] point in
+            scene?.land(on: FrontmostWindowTracker.windowFrame(atScreenPoint: point))
+        }
+        scene?.onHoldEnded = { [weak engine] in
+            engine?.start()
+        }
     }
 
     /// TCC/window-focus notifications don't cover the lock screen; these

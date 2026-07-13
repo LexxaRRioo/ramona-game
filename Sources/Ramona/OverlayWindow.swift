@@ -10,19 +10,39 @@ final class OverlayWindowController: NSWindowController {
         (window as! OverlayWindow).catScene
     }
 
-    /// Stops (or resumes) the SpriteKit render/update loop entirely, e.g.
-    /// around screen lock, for near-zero idle CPU.
+    override func showWindow(_ sender: Any?) {
+        super.showWindow(sender)
+        (window as! OverlayWindow).startHoverTracking()
+    }
+
+    /// Stops (or resumes) the SpriteKit render/update loop and the Phase 4
+    /// cursor-hover polling entirely, e.g. around screen lock, for
+    /// near-zero idle CPU.
     func setPaused(_ paused: Bool) {
-        (window as! OverlayWindow).skView.isPaused = paused
+        let overlayWindow = window as! OverlayWindow
+        overlayWindow.skView.isPaused = paused
+        if paused {
+            overlayWindow.stopHoverTracking()
+        } else {
+            overlayWindow.startHoverTracking()
+        }
     }
 }
 
-/// Full-screen, click-through, always-on-top window that hosts the cat.
-/// Skeleton phase: the whole window ignores mouse events since the cat
-/// isn't interactive yet (see Phase 4 for pixel-level hit-testing).
-final class OverlayWindow: NSWindow {
+/// Full-screen window that hosts the cat. Ignores mouse events (click-through
+/// to whatever's underneath) everywhere except while the cursor is over the
+/// cat herself (Phase 4) - see startHoverTracking.
+///
+/// NSPanel + .nonactivatingPanel, not plain NSWindow: without it, a click on
+/// the cat (petting/dragging) makes our accessory app the active app, which
+/// visually deactivates (greys out) whatever window was frontmost, even
+/// though canBecomeKey/canBecomeMain already refuse key/main status.
+/// .nonactivatingPanel is the documented way to receive clicks without that
+/// side effect.
+final class OverlayWindow: NSPanel {
     let catScene: CatScene
     let skView: SKView
+    private var hoverPollTimer: Timer?
 
     init(screen: NSScreen) {
         catScene = CatScene(size: screen.frame.size)
@@ -30,7 +50,7 @@ final class OverlayWindow: NSWindow {
 
         super.init(
             contentRect: screen.frame,
-            styleMask: [.borderless],
+            styleMask: [.borderless, .nonactivatingPanel],
             backing: .buffered,
             defer: false
         )
@@ -51,4 +71,30 @@ final class OverlayWindow: NSWindow {
 
     override var canBecomeKey: Bool { false }
     override var canBecomeMain: Bool { false }
+
+    /// Polls the cursor (rather than a global NSEvent monitor, to stay
+    /// consistent with the rest of the app's Timer-driven design and avoid
+    /// extra API surface) and toggles ignoresMouseEvents off only while it's
+    /// within the cat's hit radius, so a click there reaches CatScene's
+    /// mouseDown/mouseDragged/mouseUp instead of passing through to
+    /// whatever's underneath. Suspended entirely mid-drag (isInteracting),
+    /// since the cursor is expected to leave the original hit area then.
+    func startHoverTracking() {
+        guard hoverPollTimer == nil else { return }
+        hoverPollTimer = Timer.scheduledTimer(withTimeInterval: 1.0 / 30, repeats: true) { [weak self] _ in
+            self?.pollHover()
+        }
+    }
+
+    func stopHoverTracking() {
+        hoverPollTimer?.invalidate()
+        hoverPollTimer = nil
+    }
+
+    private func pollHover() {
+        guard !catScene.isInteracting else { return }
+        let screenPoint = NSEvent.mouseLocation
+        let local = CGPoint(x: screenPoint.x - frame.origin.x, y: screenPoint.y - frame.origin.y)
+        ignoresMouseEvents = !catScene.hitTest(local)
+    }
 }

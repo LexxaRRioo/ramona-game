@@ -48,6 +48,20 @@ final class BehaviorEngine {
         CatSaveState(needs: needs, lastUpdate: lastUpdate).persist()
     }
 
+    /// User pet her (Phase 4). Instant social-need refill, unlike everything
+    /// else here which only decays - nothing else restores a need yet.
+    func pet() {
+        needs.restoreSocial(by: 0.5)
+        mood = Mood(needs: needs)
+        evaluateAction()
+    }
+
+    /// Whether she'd currently tolerate being picked up. "Если взять Р. на
+    /// руки специально против её воли, она попытается вырваться и убежать" -
+    /// modeled as mood-gated: a grumpy (neglected) cat refuses, matching
+    /// "against her will" meaning against her *current* mood, not a coin flip.
+    var toleratesHold: Bool { mood != .grumpy }
+
     private func tick() {
         let now = Date()
         needs.decay(over: now.timeIntervalSince(lastUpdate), traits: species.traits)
@@ -60,7 +74,7 @@ final class BehaviorEngine {
 
     private func evaluateAction() {
         let hour = Double(Calendar.current.component(.hour, from: Date()))
-        let candidates: [CatAction] = [.walk, .idle, .sleep]
+        let candidates: [CatAction] = [.walk, .idle, .sleep, .seekAttention]
         let scored = candidates.map { action in
             (action, action.score(needs: needs, traits: species.traits, sleepWindows: species.schedule.sleepWindows, hour: hour))
         }

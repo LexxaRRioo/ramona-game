@@ -6,6 +6,12 @@ enum CatAction: Equatable {
     case walk
     case idle
     case sleep
+    /// "Приходит туда куда внимание обращено" / "грозно смотрит когда на
+    /// неё долго не обращают внимание" - when neglected long enough she
+    /// goes looking for attention instead of just pacing. Sated instantly
+    /// by BehaviorEngine.pet(), unlike the other needs (nothing restores
+    /// them yet - that's feeding/toys in Phase 5).
+    case seekAttention
 
     /// Utility AI: each candidate scores itself from needs/traits/time of
     /// day; BehaviorEngine runs the highest scorer. Nothing here rules an
@@ -26,6 +32,8 @@ enum CatAction: Equatable {
             // Always a modest contender, so it only wins when sleep and
             // walk both have little reason to.
             return 0.35
+        case .seekAttention:
+            return (1 - needs.social) * (0.5 + traits.sociability)
         }
     }
 }

@@ -11,7 +11,7 @@ enum Mood: Int, Comparable {
     static func < (lhs: Mood, rhs: Mood) -> Bool { lhs.rawValue < rhs.rawValue }
 
     init(needs: NeedsState) {
-        let average = (needs.hunger + needs.energy + needs.play) / 3
+        let average = (needs.hunger + needs.energy + needs.play + needs.social) / 4
         switch average {
         case 0.7...:
             self = .happy
