@@ -1,0 +1,17 @@
+{
+    "id": "ramona",
+    "displayName": "Ramona",
+    "spriteSet": "placeholder",
+    "traits": {
+        "playfulness": 0.8,
+        "laziness": 0.35,
+        "foodMotivation": 0.5,
+        "boldness": 0.75,
+        "sociability": 0.85
+    },
+    "schedule": {
+        "sleepHours": ["01:00-08:00", "13:00-15:00"]
+    },
+    "itemPreferences": [],
+    "memeBehaviors": []
+}

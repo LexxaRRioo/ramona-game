@@ -4,8 +4,19 @@ import Foundation
 /// Wraps the Accessibility trust check/prompt flow (AXIsProcessTrusted).
 /// Ramona needs this granted to read other apps' window frames via AXUIElement.
 enum AccessibilityPermission {
+    private static let grantedBeforeKey = "accessibilityGrantedBefore"
+
     static var isGranted: Bool {
         AXIsProcessTrusted()
+    }
+
+    /// Persisted across launches (and across rebuilds, unlike the OS grant
+    /// itself - see the note on hasBeenGrantedBefore's read site) so we
+    /// know whether the user has already been through the System Settings
+    /// dance before, and don't nag them with the same modal every launch.
+    static var hasBeenGrantedBefore: Bool {
+        get { UserDefaults.standard.bool(forKey: grantedBeforeKey) }
+        set { UserDefaults.standard.set(newValue, forKey: grantedBeforeKey) }
     }
 
     /// Triggers macOS's native "add Ramona to Accessibility" system prompt,

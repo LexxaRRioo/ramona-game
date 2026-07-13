@@ -22,6 +22,15 @@ rm -rf "$APP_BUNDLE"
 mkdir -p "$MACOS_DIR"
 cp "${BUILD_DIR}/${APP_NAME}" "${MACOS_DIR}/${APP_NAME}"
 
+# Bundled resources (Species/ramona.json etc.) are deliberately NOT copied
+# into the .app: SwiftPM's generated Bundle.module accessor falls back to
+# the absolute build-directory path baked in at compile time when it can't
+# find a resource bundle at the app root, and placing one there ourselves
+# makes codesign reject the bundle ("unsealed contents present in the
+# bundle root") since it's outside Contents/. So this only works as long as
+# BUILD_DIR/*.bundle still exists on disk - don't delete .build by hand
+# between building and running; re-run this script instead.
+
 cat > "${CONTENTS}/Info.plist" <<PLIST
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">

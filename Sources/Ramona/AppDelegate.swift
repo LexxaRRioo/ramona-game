@@ -4,6 +4,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var overlayWindowController: OverlayWindowController?
     private var windowTracker: FrontmostWindowTracker?
     private var permissionPollTimer: Timer?
+    private var behaviorEngine: BehaviorEngine?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         NSApp.setActivationPolicy(.accessory)
@@ -13,26 +14,70 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         controller.showWindow(nil)
         overlayWindowController = controller
 
+        startBehaviorEngine()
+        observeScreenLock()
         startAccessibilityFlow()
+    }
+
+    func applicationWillTerminate(_ notification: Notification) {
+        behaviorEngine?.saveNow()
+    }
+
+    /// Runs independently of Accessibility/window-tracking - the cat has
+    /// needs, mood, and a resting/walking/sleeping state machine whether or
+    /// not she can see other apps' windows yet.
+    private func startBehaviorEngine() {
+        let species = SpeciesDefinition.loadRamona()
+        let engine = BehaviorEngine(species: species, saveState: CatSaveState.load())
+        engine.onStateChange = { [weak self] action, mood in
+            self?.overlayWindowController?.catScene.apply(action: action, mood: mood)
+        }
+        engine.start()
+        behaviorEngine = engine
+    }
+
+    /// TCC/window-focus notifications don't cover the lock screen; these
+    /// are the standard (no-entitlement-needed) distributed notifications
+    /// apps use to detect it, so the sim and renderer can both pause for
+    /// near-zero idle CPU while locked.
+    private func observeScreenLock() {
+        let center = DistributedNotificationCenter.default()
+        center.addObserver(forName: Notification.Name("com.apple.screenIsLocked"), object: nil, queue: .main) { [weak self] _ in
+            self?.behaviorEngine?.pause()
+            self?.overlayWindowController?.setPaused(true)
+        }
+        center.addObserver(forName: Notification.Name("com.apple.screenIsUnlocked"), object: nil, queue: .main) { [weak self] _ in
+            self?.overlayWindowController?.setPaused(false)
+            self?.behaviorEngine?.start()
+        }
     }
 
     private func startAccessibilityFlow() {
         if AccessibilityPermission.isGranted {
+            AccessibilityPermission.hasBeenGrantedBefore = true
             startWindowTracking()
             return
         }
 
         AccessibilityPermission.requestIfNeeded()
 
-        // macOS only shows its own consent dialog once; a returning user who
-        // previously denied it gets no dialog at all, so fall back to an
-        // explicit alert if we're still untrusted a moment later.
-        DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { [weak self] in
-            guard let self, !AccessibilityPermission.isGranted else { return }
-            self.showAccessibilityInstructionsAlert()
+        // A rebuilt dev binary (see Scripts/build-dev-app.sh) gets ad-hoc
+        // re-signed, which changes its code identity, so an *already*
+        // granted-looking toggle in System Settings may actually be for a
+        // stale build - the freshly relaunched process itself is still
+        // untrusted. If we already know the user has done this dance
+        // before, don't interrupt them with the same modal every launch;
+        // just keep polling quietly and pick it up once they re-toggle it.
+        // Only first-time users get the explicit instructional alert.
+        if !AccessibilityPermission.hasBeenGrantedBefore {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { [weak self] in
+                guard let self, !AccessibilityPermission.isGranted else { return }
+                self.showAccessibilityInstructionsAlert()
+            }
         }
 
         permissionPollTimer = AccessibilityPermission.waitForGrant { [weak self] in
+            AccessibilityPermission.hasBeenGrantedBefore = true
             self?.startWindowTracking()
         }
     }

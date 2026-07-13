@@ -9,6 +9,12 @@ final class OverlayWindowController: NSWindowController {
     var catScene: CatScene {
         (window as! OverlayWindow).catScene
     }
+
+    /// Stops (or resumes) the SpriteKit render/update loop entirely, e.g.
+    /// around screen lock, for near-zero idle CPU.
+    func setPaused(_ paused: Bool) {
+        (window as! OverlayWindow).skView.isPaused = paused
+    }
 }
 
 /// Full-screen, click-through, always-on-top window that hosts the cat.
@@ -16,9 +22,11 @@ final class OverlayWindowController: NSWindowController {
 /// isn't interactive yet (see Phase 4 for pixel-level hit-testing).
 final class OverlayWindow: NSWindow {
     let catScene: CatScene
+    let skView: SKView
 
     init(screen: NSScreen) {
         catScene = CatScene(size: screen.frame.size)
+        skView = SKView(frame: CGRect(origin: .zero, size: screen.frame.size))
 
         super.init(
             contentRect: screen.frame,
@@ -35,8 +43,8 @@ final class OverlayWindow: NSWindow {
         collectionBehavior = [.canJoinAllSpaces, .stationary, .fullScreenAuxiliary, .ignoresCycle]
         isReleasedWhenClosed = false
 
-        let skView = SKView(frame: CGRect(origin: .zero, size: screen.frame.size))
         skView.allowsTransparency = true
+        skView.preferredFramesPerSecond = 30
         skView.presentScene(catScene)
         contentView = skView
     }

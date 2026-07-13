@@ -7,7 +7,10 @@ let package = Package(
     targets: [
         .executableTarget(
             name: "Ramona",
-            path: "Sources/Ramona"
+            path: "Sources/Ramona",
+            resources: [
+                .copy("Resources/Species")
+            ]
         )
     ]
 )
