@@ -12,13 +12,21 @@ enum CatAction: Equatable {
     /// by BehaviorEngine.pet(), unlike the other needs (nothing restores
     /// them yet - that's feeding/toys in Phase 5).
     case seekAttention
+    /// "Р. любит забираться на высокие предметы. И в принципе любит
+    /// возвышенности" - an occasional, trait-gated urge to be up on a
+    /// window's top edge, not the default place she lives (see CatScene's
+    /// currentSurface, which is the floor unless she's actively climbing,
+    /// was just dropped on a window, or that window itself moved under her).
+    case climb
 
     /// Utility AI: each candidate scores itself from needs/traits/time of
     /// day; BehaviorEngine runs the highest scorer. Nothing here rules an
     /// action out entirely - e.g. sleep outside a nap window still scores
     /// low-but-nonzero, so the cat can nap on demand if energy runs low
-    /// enough, not just at scheduled hours.
-    func score(needs: NeedsState, traits: SpeciesDefinition.TraitWeights, sleepWindows: [SleepWindow], hour: Double) -> Double {
+    /// enough, not just at scheduled hours. climb is the one exception: it's
+    /// hard-gated to 0 with no window to climb onto, since "climb toward
+    /// nothing" isn't a real option the way "nap outside nap hours" is.
+    func score(needs: NeedsState, traits: SpeciesDefinition.TraitWeights, sleepWindows: [SleepWindow], hour: Double, windowAvailable: Bool) -> Double {
         switch self {
         case .sleep:
             var score = (1 - needs.energy) * (0.5 + traits.laziness)
@@ -34,6 +42,9 @@ enum CatAction: Equatable {
             return 0.35
         case .seekAttention:
             return (1 - needs.social) * (0.5 + traits.sociability)
+        case .climb:
+            guard windowAvailable else { return 0 }
+            return traits.boldness * 0.6 + traits.playfulness * 0.1
         }
     }
 }

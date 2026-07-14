@@ -2,28 +2,41 @@ import AppKit
 import SpriteKit
 
 /// Placeholder cat: a plain circle standing in for the real sprite (Phase 5).
-/// Movement follows whatever action BehaviorEngine picks (Phase 3), using
-/// the frontmost tracked window's top edge when one is available (Phase 2),
-/// or the screen's bottom edge otherwise.
+/// Movement follows whatever action BehaviorEngine picks (Phase 3). She
+/// lives on the screen floor by default; standing on a window's top edge
+/// only happens via the trait-gated CatAction.climb, a manual drag-and-drop
+/// landing there, or while already up there and that window itself moves -
+/// see currentSurface.
 final class CatScene: SKScene {
+    private enum Surface {
+        case floor
+        case window(CGRect)
+    }
+
     private let cat = SKShapeNode(circleOfRadius: 16)
     private let hitRadius: CGFloat = 22
     private let groundMargin: CGFloat = 20
     private let sideMargin: CGFloat = 40
     private let minPerchWidth: CGFloat = 80
     private let walkSpeed: CGFloat = 60 // points per second
-    private let dropSpeed: CGFloat = 220 // points per second, falling off a window
+    private let dropSpeed: CGFloat = 220 // points per second, used to scale settle/fall durations
     // "Р. грозно смотрит" / paws at a cursor that lingers nearby - cooldown
     // keeps it a rare flourish rather than firing every frame she's close.
     private let stalkRadius: CGFloat = 90
     private let stalkCooldown: TimeInterval = 4
 
+    /// Cache of the live-tracked frontmost window's frame (Phase 2), kept
+    /// up to date regardless of whether she's currently on it - it's what
+    /// CatAction.climb targets when it wins, and what setTargetWindow
+    /// re-applies live if she happens to already be standing on it.
     private var windowFrame: CGRect?
-    private var groundY: CGFloat = 0
-    private var groundMinX: CGFloat = 0
-    private var groundMaxX: CGFloat = 0
+    private var currentSurface: Surface = .floor
     private var currentAction: CatAction = .walk
     private var lastStalkTime: TimeInterval = 0
+    /// Set by land(on:) so the next apply() doesn't immediately override a
+    /// manual drop's surface just because the freshly re-evaluated action
+    /// happens to differ from .climb - see apply(action:mood:needs:).
+    private var justLanded = false
 
     /// User clicked-and-released on the cat without dragging past the
     /// threshold ("приходит если её позвать и мурчит, когда начинаешь её
@@ -35,7 +48,7 @@ final class CatScene: SKScene {
     var onHoldRequested: (() -> Bool)?
     /// Fires on mouseUp after an accepted hold, with the drop point in
     /// screen coordinates - before onHoldEnded, so land(on:) has already
-    /// updated ground bounds by the time the engine resumes and settles her.
+    /// updated the surface by the time the engine resumes and settles her.
     var onDropped: ((CGPoint) -> Void)?
     /// Fires on mouseUp after an accepted hold.
     var onHoldEnded: (() -> Void)?
@@ -65,10 +78,7 @@ final class CatScene: SKScene {
 
         cat.fillColor = .systemOrange
         cat.strokeColor = .clear
-        groundY = groundMargin
-        groundMinX = sideMargin
-        groundMaxX = size.width - sideMargin
-        cat.position = CGPoint(x: size.width / 2, y: groundY)
+        cat.position = CGPoint(x: size.width / 2, y: groundMargin)
         addChild(cat)
 
         setUpDebugOverlay()
@@ -100,9 +110,14 @@ final class CatScene: SKScene {
     }
 
     private func updateDebugText(action: CatAction, mood: Mood, needs: NeedsState) {
+        let surfaceText: String
+        switch currentSurface {
+        case .floor: surfaceText = "floor"
+        case .window: surfaceText = "window"
+        }
         debugLabel.text = String(
-            format: "action: %@\nmood: %@\nhunger: %.2f\nenergy: %.2f\nplay: %.2f\nsocial: %.2f",
-            String(describing: action), String(describing: mood),
+            format: "action: %@\nsurface: %@\nmood: %@\nhunger: %.2f\nenergy: %.2f\nplay: %.2f\nsocial: %.2f",
+            String(describing: action), surfaceText, String(describing: mood),
             needs.hunger, needs.energy, needs.play, needs.social
         )
     }
@@ -111,55 +126,65 @@ final class CatScene: SKScene {
         frame.width >= minPerchWidth && frame.maxY < size.height && CGRect(origin: .zero, size: size).intersects(frame)
     }
 
-    /// Called whenever the tracked window's frame changes, or with nil when
-    /// there's no trackable window (closed, minimized, app switched to one
-    /// without a window, or Accessibility not yet granted).
+    /// Called whenever the live-tracked frontmost window's frame changes, or
+    /// with nil when there's none (closed, minimized, switched to an app
+    /// without a window, or Accessibility not yet granted). Always updates
+    /// the cache; only actually moves her if she's currently standing on
+    /// that window - otherwise it's just kept ready for the next climb.
     func setTargetWindow(_ frame: CGRect?) {
         guard let frame, isValidPerch(frame) else {
-            guard windowFrame != nil else { return }
             windowFrame = nil
-            groundY = groundMargin
-            groundMinX = sideMargin
-            groundMaxX = size.width - sideMargin
-            dropToGround()
+            if case .window = currentSurface {
+                currentSurface = .floor
+                dropToGround()
+            }
             return
         }
 
         windowFrame = frame
-        groundY = frame.maxY
-        groundMinX = frame.minX + sideMargin / 2
-        groundMaxX = frame.maxX - sideMargin / 2
-        applyCurrentAction()
+        if case .window = currentSurface {
+            currentSurface = .window(frame)
+            applyCurrentAction()
+        }
     }
 
-    /// Called after a completed drag (Phase 4), with whichever window (if
-    /// any) AppDelegate found under the drop point - "хочу чтобы кошка
-    /// приземлялась на окно, если её туда перетащили". Unlike
-    /// setTargetWindow (driven by live AX change notifications, which skips
-    /// redundant no-op transitions), this always updates ground bounds: the
+    /// Called after a completed drag (Phase 4), with whichever surface (if
+    /// any) AppDelegate found directly below the drop point - "может кошка
+    /// всегда падает вниз, а забирается наверх только отдельным действием".
+    /// Unlike setTargetWindow (driven by live AX change notifications,
+    /// which skip redundant no-op transitions), this always applies: the
     /// cat's raw position right after a drag is wherever the user released
-    /// her, not necessarily anywhere near a ground line yet. No animation of
+    /// her, not necessarily anywhere near a surface yet. No animation of
     /// its own - onHoldEnded's engine.start() runs an immediate catch-up
     /// tick right after this, which settles her via applyCurrentAction()
-    /// using whatever ground bounds are current by then.
+    /// using whatever surface is current by then.
     func land(on frame: CGRect?) {
         if let frame, isValidPerch(frame) {
-            windowFrame = frame
-            groundY = frame.maxY
-            groundMinX = frame.minX + sideMargin / 2
-            groundMaxX = frame.maxX - sideMargin / 2
+            currentSurface = .window(frame)
         } else {
-            windowFrame = nil
-            groundY = groundMargin
-            groundMinX = sideMargin
-            groundMaxX = size.width - sideMargin
+            currentSurface = .floor
         }
+        justLanded = true
     }
 
     /// Called by BehaviorEngine whenever its utility AI picks a new action
     /// or mood changes. Mood only tints the placeholder for now - real
     /// per-mood animations arrive with Phase 5 art.
     func apply(action: CatAction, mood: Mood, needs: NeedsState) {
+        if !justLanded {
+            if action == .climb && currentAction != .climb {
+                // Entering climb: head for whatever window is currently
+                // trackable. CatAction.climb already scores 0 when none is
+                // available, so this should always find one in practice.
+                if let windowFrame, isValidPerch(windowFrame) {
+                    currentSurface = .window(windowFrame)
+                }
+            } else if action != .climb && currentAction == .climb {
+                currentSurface = .floor
+            }
+        }
+        justLanded = false
+
         currentAction = action
         updateMoodTint(mood)
         applyCurrentAction()
@@ -266,17 +291,39 @@ final class CatScene: SKScene {
         return CGPoint(x: screenPoint.x - window.frame.origin.x, y: screenPoint.y - window.frame.origin.y)
     }
 
+    /// The active ground line - the current window's top edge while
+    /// currentSurface is .window, the screen floor otherwise.
+    private func groundBounds() -> (y: CGFloat, minX: CGFloat, maxX: CGFloat) {
+        if case .window(let frame) = currentSurface, isValidPerch(frame) {
+            return (frame.maxY, frame.minX + sideMargin / 2, frame.maxX - sideMargin / 2)
+        }
+        return (groundMargin, sideMargin, size.width - sideMargin)
+    }
+
     private func applyCurrentAction() {
+        let (groundY, groundMinX, groundMaxX) = groundBounds()
         guard groundMinX < groundMaxX else { return }
         cat.removeAllActions()
         cat.setScale(1)
         cat.alpha = 1
 
         let clampedX = min(max(cat.position.x, groundMinX), groundMaxX)
-        let settle = SKAction.move(to: CGPoint(x: clampedX, y: groundY), duration: 0.25)
+        // A fixed short duration here made drop-landings and climbs look
+        // like reversed gravity: covering a whole screen's height in 0.25s
+        // reads as floating, not falling/hopping. Scaling with distance
+        // fixes both directions - routine same-surface action switches stay
+        // snappy (small distance, clamped to the 0.15s floor) while a big
+        // climb-up or floor-drop takes proportionally longer, clamped so it
+        // never feels sluggish either.
+        let settleDistance = hypot(clampedX - cat.position.x, groundY - cat.position.y)
+        let settleDuration = max(0.15, min(0.6, TimeInterval(settleDistance / dropSpeed)))
+        let settle = SKAction.move(to: CGPoint(x: clampedX, y: groundY), duration: settleDuration)
 
         switch currentAction {
-        case .walk:
+        case .walk, .climb:
+            // Climbing (Phase 4) reuses the walk visual - only the surface
+            // (floor vs. a window's top edge, chosen in apply(action:...))
+            // differs; a distinct climbing animation is a Phase 5 art thing.
             cat.run(.sequence([settle, walkLoop(from: clampedX)]))
         case .idle:
             cat.run(settle)
@@ -300,6 +347,7 @@ final class CatScene: SKScene {
 
     private func walkLoop(from startX: CGFloat, speed: CGFloat? = nil) -> SKAction {
         let speed = speed ?? walkSpeed
+        let (_, groundMinX, groundMaxX) = groundBounds()
         func leg(to x: CGFloat, from x0: CGFloat) -> SKAction {
             .moveTo(x: x, duration: TimeInterval(abs(x - x0) / speed))
         }
@@ -310,10 +358,11 @@ final class CatScene: SKScene {
     }
 
     private func dropToGround() {
+        let (groundY, _, _) = groundBounds()
         cat.removeAllActions()
         cat.setScale(1)
         cat.alpha = 1
-        let fallDuration = TimeInterval((cat.position.y - groundY) / dropSpeed)
+        let fallDuration = TimeInterval(abs(cat.position.y - groundY) / dropSpeed)
         let fall = SKAction.move(to: CGPoint(x: cat.position.x, y: groundY), duration: max(0.1, fallDuration))
         cat.run(fall) { [weak self] in
             self?.applyCurrentAction()

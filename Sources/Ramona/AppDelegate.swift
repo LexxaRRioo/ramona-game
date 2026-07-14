@@ -56,7 +56,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             return true
         }
         scene?.onDropped = { [weak scene] point in
-            scene?.land(on: FrontmostWindowTracker.windowFrame(atScreenPoint: point))
+            scene?.land(on: FrontmostWindowTracker.surfaceBelow(point))
         }
         scene?.onHoldEnded = { [weak engine] in
             engine?.start()
@@ -125,6 +125,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let tracker = FrontmostWindowTracker()
         tracker.onFrameChange = { [weak self] frame in
             self?.overlayWindowController?.catScene.setTargetWindow(frame)
+            self?.behaviorEngine?.setWindowAvailable(frame != nil)
         }
         windowTracker = tracker
     }

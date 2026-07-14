@@ -1,5 +1,6 @@
 import AppKit
 import ApplicationServices
+import CoreGraphics
 
 /// Tracks the frontmost application's focused window frame via the
 /// Accessibility API, and reports live updates when it moves, resizes,
@@ -134,45 +135,48 @@ final class FrontmostWindowTracker {
     }
 
     /// One-off spatial lookup (unlike the live frontmost-window tracking
-    /// above) - used when the user drops the cat on an arbitrary screen
-    /// point (Phase 4), which may not belong to the frontmost app at all.
-    static func windowFrame(atScreenPoint point: CGPoint) -> CGRect? {
+    /// above) - used when the user drops the cat (Phase 4). "Always falls
+    /// down": only windows whose top edge is at or below the drop point
+    /// qualify, so releasing her never snaps her upward onto something -
+    /// climbing onto a window above her is a deliberate act (CatAction.climb),
+    /// not something a drop does automatically. Among qualifying windows
+    /// (horizontally under the point too), the highest top edge wins - the
+    /// nearest surface below her, not the floor past a window she could
+    /// have landed on.
+    ///
+    /// Deliberately CGWindowListCopyWindowInfo, not an AX element-at-position
+    /// hit test: OverlayWindow floats above everything and covers the whole
+    /// screen, so an AX hit test at any point just finds our own (invisible,
+    /// AX-empty) window every time - that was the original "always falls to
+    /// the ground" bug. layer == 0 already excludes our own floating-level
+    /// window from this list, so there's no need to also filter by PID.
+    /// Bounds/owner/layer don't need Screen Recording permission - only
+    /// window titles do, which this never reads.
+    static func surfaceBelow(_ point: CGPoint) -> CGRect? {
         guard let primaryScreenHeight = NSScreen.screens.first(where: { $0.frame.origin == .zero })?.frame.height else {
             return nil
         }
-        // AX screen-position queries use top-left-origin coordinates, like
-        // kAXPositionAttribute in cocoaFrame(of:) - flip from Cocoa's
-        // bottom-left origin.
-        let axPoint = CGPoint(x: point.x, y: primaryScreenHeight - point.y)
-
-        var element: AXUIElement?
-        guard AXUIElementCopyElementAtPosition(AXUIElementCreateSystemWide(), Float(axPoint.x), Float(axPoint.y), &element) == .success,
-              let hitElement = element else { return nil }
-
-        // The hit element is often a child (button, text field...) - walk
-        // up to its containing window.
-        var current = hitElement
-        var depth = 0
-        while role(of: current) != (kAXWindowRole as String) {
-            depth += 1
-            guard depth < 20, let parentElement = parent(of: current) else { return nil }
-            current = parentElement
+        guard let infoList = CGWindowListCopyWindowInfo([.optionOnScreenOnly, .excludeDesktopElements], kCGNullWindowID) as? [[String: AnyObject]] else {
+            return nil
         }
 
-        return cocoaFrame(of: current)
-    }
+        var best: CGRect?
+        for info in infoList {
+            guard let layer = info[kCGWindowLayer as String] as? Int, layer == 0,
+                  let boundsDict = info[kCGWindowBounds as String] as? [String: CGFloat],
+                  let x = boundsDict["X"], let y = boundsDict["Y"],
+                  let width = boundsDict["Width"], let height = boundsDict["Height"]
+            else { continue }
 
-    private static func role(of element: AXUIElement) -> String? {
-        var value: AnyObject?
-        guard AXUIElementCopyAttributeValue(element, kAXRoleAttribute as CFString, &value) == .success else { return nil }
-        return value as? String
-    }
-
-    private static func parent(of element: AXUIElement) -> AXUIElement? {
-        var value: AnyObject?
-        guard AXUIElementCopyAttributeValue(element, kAXParentAttribute as CFString, &value) == .success,
-              let value else { return nil }
-        return (value as! AXUIElement)
+            // kCGWindowBounds is top-left-origin, like kAXPositionAttribute
+            // in cocoaFrame(of:) - flip to Cocoa's bottom-left origin.
+            let cocoaFrame = CGRect(x: x, y: primaryScreenHeight - y - height, width: width, height: height)
+            guard cocoaFrame.minX <= point.x, point.x <= cocoaFrame.maxX, cocoaFrame.maxY <= point.y else { continue }
+            if best == nil || cocoaFrame.maxY > best!.maxY {
+                best = cocoaFrame
+            }
+        }
+        return best
     }
 
     private static let axCallback: AXObserverCallback = { _, _, notification, refcon in

@@ -17,6 +17,10 @@ final class BehaviorEngine {
     private let tickInterval: TimeInterval = 20
     // Avoids flickering between two similarly-scored actions every tick.
     private let actionSwitchMargin: Double = 0.1
+    /// Whether there's currently a window she could climb onto - gates
+    /// CatAction.climb's score. Kept up to date by AppDelegate from the
+    /// same live tracking CatScene uses (see FrontmostWindowTracker).
+    private var isWindowAvailable = false
 
     init(species: SpeciesDefinition, saveState: CatSaveState?) {
         self.species = species
@@ -62,6 +66,10 @@ final class BehaviorEngine {
     /// "against her will" meaning against her *current* mood, not a coin flip.
     var toleratesHold: Bool { mood != .grumpy }
 
+    func setWindowAvailable(_ available: Bool) {
+        isWindowAvailable = available
+    }
+
     private func tick() {
         let now = Date()
         needs.decay(over: now.timeIntervalSince(lastUpdate), traits: species.traits)
@@ -74,9 +82,9 @@ final class BehaviorEngine {
 
     private func evaluateAction() {
         let hour = Double(Calendar.current.component(.hour, from: Date()))
-        let candidates: [CatAction] = [.walk, .idle, .sleep, .seekAttention]
+        let candidates: [CatAction] = [.walk, .idle, .sleep, .seekAttention, .climb]
         let scored = candidates.map { action in
-            (action, action.score(needs: needs, traits: species.traits, sleepWindows: species.schedule.sleepWindows, hour: hour))
+            (action, action.score(needs: needs, traits: species.traits, sleepWindows: species.schedule.sleepWindows, hour: hour, windowAvailable: isWindowAvailable))
         }
 
         if let best = scored.max(by: { $0.1 < $1.1 }) {
