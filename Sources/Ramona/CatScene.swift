@@ -213,6 +213,21 @@ final class CatScene: SKScene {
         cat.run(.sequence([.scale(to: 1.3, duration: 0.15), .scale(to: 1.0, duration: 0.15)]))
     }
 
+    /// Placeholder feed/toy cues (Phase 5) - a real eating/pouncing
+    /// animation is Phase 5 art's job; this just gives the interaction
+    /// visible feedback in the meantime, reusing petPulse's shape scaled up
+    /// a little so the three don't read as identical.
+    func playEatPulse() {
+        cat.run(.sequence([.scale(to: 1.4, duration: 0.2), .scale(to: 1.0, duration: 0.2)]))
+    }
+
+    func playToyPulse() {
+        cat.run(.sequence([
+            .scale(to: 1.2, duration: 0.1), .scale(to: 0.95, duration: 0.1),
+            .scale(to: 1.15, duration: 0.1), .scale(to: 1.0, duration: 0.1)
+        ]))
+    }
+
     /// "Если взять Р. на руки специально против её воли, она попытается
     /// вырваться и убежать" - a rejected pickup (BehaviorEngine.toleratesHold
     /// == false) plays this instead of entering a drag.

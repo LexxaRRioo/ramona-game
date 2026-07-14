@@ -1,0 +1,8 @@
+{
+    "id": "chicken",
+    "displayName": "Консервированная курица",
+    "kind": "food",
+    "restores": {
+        "hunger": 0.7
+    }
+}

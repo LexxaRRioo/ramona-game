@@ -5,6 +5,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var windowTracker: FrontmostWindowTracker?
     private var permissionPollTimer: Timer?
     private var behaviorEngine: BehaviorEngine?
+    private var species: SpeciesDefinition?
+    private var items: [ItemDefinition] = []
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         NSApp.setActivationPolicy(.accessory)
@@ -27,11 +29,35 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         behaviorEngine?.saveNow()
     }
 
+    /// Menu bar "Feed" (RamonaApp) - V1 scope is just canned chicken, so
+    /// there's nothing to choose between yet.
+    func feed() {
+        guard let item = items.first(where: { $0.kind == .food }) else { return }
+        behaviorEngine?.use(item)
+        overlayWindowController?.catScene.playEatPulse()
+    }
+
+    /// Menu bar "Offer Toy" (RamonaApp) - picks randomly among her
+    /// preferred toys (SpeciesDefinition.itemPreferences) rather than any
+    /// toy that happens to exist, so a future non-favorite item added to
+    /// Items/ doesn't show up here uninvited.
+    func offerToy() {
+        guard let species else { return }
+        let preferredToys = species.itemPreferences.compactMap { id in
+            items.first(where: { $0.id == id && $0.kind == .toy })
+        }
+        guard let item = preferredToys.randomElement() else { return }
+        behaviorEngine?.use(item)
+        overlayWindowController?.catScene.playToyPulse()
+    }
+
     /// Runs independently of Accessibility/window-tracking - the cat has
     /// needs, mood, and a resting/walking/sleeping state machine whether or
     /// not she can see other apps' windows yet.
     private func startBehaviorEngine() {
         let species = SpeciesDefinition.loadRamona()
+        self.species = species
+        items = ItemDefinition.loadAll()
         let engine = BehaviorEngine(species: species, saveState: CatSaveState.load())
         engine.onStateChange = { [weak self, weak engine] action, mood in
             guard let engine else { return }

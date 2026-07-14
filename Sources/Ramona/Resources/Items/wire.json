@@ -1,0 +1,8 @@
+{
+    "id": "wire",
+    "displayName": "Проводок",
+    "kind": "toy",
+    "restores": {
+        "play": 0.5
+    }
+}

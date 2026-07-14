@@ -52,10 +52,21 @@ final class BehaviorEngine {
         CatSaveState(needs: needs, lastUpdate: lastUpdate).persist()
     }
 
-    /// User pet her (Phase 4). Instant social-need refill, unlike everything
-    /// else here which only decays - nothing else restores a need yet.
+    /// User pet her (Phase 4). Instant social-need refill.
     func pet() {
-        needs.restoreSocial(by: 0.5)
+        needs.restore("social", by: 0.5)
+        mood = Mood(needs: needs)
+        evaluateAction()
+    }
+
+    /// Feed/offer-toy (Phase 5) - applies whatever an ItemDefinition
+    /// declares it restores. Generic over need name so a future item type
+    /// (a bed restoring energy, say) needs no engine change, just a new
+    /// Items/*.json.
+    func use(_ item: ItemDefinition) {
+        for (need, amount) in item.restores {
+            needs.restore(need, by: amount)
+        }
         mood = Mood(needs: needs)
         evaluateAction()
     }
@@ -72,7 +83,7 @@ final class BehaviorEngine {
 
     private func tick() {
         let now = Date()
-        needs.decay(over: now.timeIntervalSince(lastUpdate), traits: species.traits)
+        needs.decay(over: now.timeIntervalSince(lastUpdate), traits: species.traits, isSleeping: currentAction == .sleep)
         lastUpdate = now
         mood = Mood(needs: needs)
 

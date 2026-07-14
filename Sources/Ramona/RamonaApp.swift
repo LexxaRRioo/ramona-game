@@ -7,6 +7,13 @@ struct RamonaApp: App {
 
     var body: some Scene {
         MenuBarExtra("Ramona", systemImage: "cat.fill") {
+            Button("Feed") {
+                appDelegate.feed()
+            }
+            Button("Offer Toy") {
+                appDelegate.offerToy()
+            }
+            Divider()
             Toggle("Debug Info", isOn: $debugInfoVisible)
                 .onChange(of: debugInfoVisible) { _, visible in
                     DebugSettings.shared.isVisible = visible
