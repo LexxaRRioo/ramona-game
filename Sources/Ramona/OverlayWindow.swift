@@ -27,6 +27,19 @@ final class OverlayWindowController: NSWindowController {
             overlayWindow.startHoverTracking()
         }
     }
+
+    /// Menu bar "Quiet Mode" - unlike setPaused (frozen but still visible,
+    /// used around screen lock), this actually hides the overlay, e.g. for
+    /// screen sharing or recording where a floating cat over every window
+    /// would be unwanted.
+    func setQuietMode(_ quiet: Bool) {
+        setPaused(quiet)
+        if quiet {
+            window?.orderOut(nil)
+        } else {
+            window?.orderFront(nil)
+        }
+    }
 }
 
 /// Full-screen window that hosts the cat. Ignores mouse events (click-through

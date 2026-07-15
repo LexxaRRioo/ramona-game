@@ -51,6 +51,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         overlayWindowController?.catScene.playToyPulse()
     }
 
+    /// Menu bar "Quiet Mode" - user-toggled hide, e.g. during screen
+    /// sharing. Pauses the same engine as screen-lock (see
+    /// observeScreenLock) rather than letting her keep deciding/decaying
+    /// unseen, then resumes with a catch-up tick on exit.
+    func setQuietMode(_ enabled: Bool) {
+        if enabled {
+            behaviorEngine?.pause()
+        } else {
+            behaviorEngine?.start()
+        }
+        overlayWindowController?.setQuietMode(enabled)
+    }
+
     /// Runs independently of Accessibility/window-tracking - the cat has
     /// needs, mood, and a resting/walking/sleeping state machine whether or
     /// not she can see other apps' windows yet.
