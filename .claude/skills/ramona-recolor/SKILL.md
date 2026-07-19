@@ -88,16 +88,23 @@ the contact sheet, then curate only the frames that need it (below).
 
 ## Batch
 
-Use `batch --all` (auto engine) for the whole sheet, review the contact sheet, then curate
-outliers with specs. The engine handles animation drift automatically — no per-frame spec
-for routine frames.
+Use `batch --all` (auto engine) for the whole sheet. The engine handles animation drift
+automatically — no per-frame spec for routine frames — and asserts every frame on-palette.
+Curate only outliers with specs.
 
-Spot-check the SLEEP family (curled/lying, rows 44–55) before trusting `--all`: it
-currently gets body + frost tail only (no white), pending a pale-belly placer.
+## Done — whole sheet
 
-## Done so far
+All 387 frames recolored into `cat_pack/ramona/ramona_sheet.png` (896×4608, 7-color Zenit),
+materialized to `ramona_sheet.aseprite` (export verified pixel-identical). The hero fronts
+`(0,0)`, `(1,0)`, `(43,0)` use their curated specs; everything else is `--auto`. Rows 0–1
+are also cropped out as named `ramona_r*.png` + `ramona_rows01.aseprite`.
 
-- Rows 0–1 cols 0–3 (8 directional idle/stand frames): fronts curated via
-  `specs/sit_43_0.json` + `specs/stand_1_0.json`, the other six from `--auto`. Deliverables
-  in `cat_pack/ramona/ramona_r*.png`, materialized to `cat_pack/ramona/ramona_rows01.aseprite`.
-- `specs/sit_43_0.json` also fits r0c0 (pixel-identical source frames).
+Family placers, all geometry-driven from each frame's own pixels:
+- FRONT — bib + muzzle + nose + white leg (viewer's right) + paws.
+- SIDE-L / SIDE-R — one eye + nose at the muzzle's forward tip + white bib; the near front
+  leg is white only when it is Ramona's left (faces-left), gray otherwise.
+- REAR — pale tail (auto) + white back feet.
+- SLEEP (`mark_sleep`, pinned to rows 44–55) — pale belly/underside + paws, plus a nose at
+  the muzzle tip when the head reads at one end; tight curls stay faceless.
+
+The remap covers all 8 source colors (the 6 common + rare `#ca719f`→nose, `#190f29`→outline).

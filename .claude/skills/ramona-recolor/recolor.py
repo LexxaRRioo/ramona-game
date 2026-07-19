@@ -23,7 +23,7 @@ Commands:
 Coordinates are always in the 64x64 cell's own pixel space.
 """
 import argparse, json, math, os
-from collections import Counter
+from collections import Counter, defaultdict
 from PIL import Image, ImageDraw
 
 SKILL_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -46,9 +46,16 @@ REMAP = {
     (114,99,97,255):  t(FROST),
     (154,135,126,255):t(FROST),   # highlight merged into frost
     (211,223,225,255):t(BODY),    # cold eye shine killed; eyes repainted in pass 2
+    (202,113,159,255):t(NOSE),    # #ca719f rare source pink (some muzzles) -> nose
+    (25,15,41,255):   t(OUTLINE), # #190f29 rare source dark -> outline
 }
 SHINE = (211,223,225,255)                       # source eye pixel = eye anchor
 INTERIOR_SRC = {(80,67,71,255),(114,99,97,255),(154,135,126,255),(211,223,225,255)}
+
+# "sleeping" is a pose, not derivable from eyes/silhouette (a fast run frame is also
+# wide + eyeless), so it is pinned to its rows on this sheet: the lying/resting block
+# (44-47 loaf, 48-51 curl, 52-55 stretched). Everything else is eye-classified.
+SLEEP_ROWS = set(range(44, 56))
 
 def load_frame(sheet, row, col):
     src = Image.open(sheet).convert("RGBA")
@@ -95,14 +102,14 @@ def row_runs(interior, y):
         else: runs.append([x, x])
     return [(a,b) for a,b in runs]
 
-def classify(eyes, interior):
+def classify(eyes, interior, row=None):
+    if row is not None and row in SLEEP_ROWS: return "SLEEP"
     x0,y0,x1,y1 = ibox(interior)
     cx = (x0 + x1) / 2.0
-    w, h = x1 - x0 + 1, y1 - y0 + 1
     if len(eyes) >= 2: return "FRONT"
     if len(eyes) == 1:
         return "SIDE-L" if eyes[0][0] < cx else "SIDE-R"
-    return "SLEEP" if w / h > 1.5 else "REAR"
+    return "REAR"
 
 # ---------------------------------------------------------------------------
 # marking placers (auto). Each writes white/nose to px, guarded to interior.
@@ -149,14 +156,11 @@ def mark_side(px, eye, interior, facing):
     ex, ey = eye
     x0,y0,x1,y1 = ibox(interior)
     def isin(x,y): return (x,y) in interior
-    # muzzle tip: front-most interior pixel in the eye row band
+    # nose = the muzzle's forward-most interior pixel (the pointy tip), 1 px
     band = [(x,y) for y in range(ey, ey+4) for x in range(64) if isin(x,y)]
     tipx = min(x for x,_ in band) if left else max(x for x,_ in band)
-    tiprows = [y for x,y in band if x == tipx]
-    ty = (min(tiprows) + 1) if tiprows else ey + 2
-    # nose at the tip (+ one pixel toward centre)
+    ty = min(y for x,y in band if x == tipx)   # the row where the tip protrudes
     pn(tipx, ty)
-    pn(tipx + 1 if left else tipx - 1, ty)
     # White front, anchored to the front-edge run of each row below the muzzle:
     #  - throat + chest bib -> white on BOTH facings
     #  - the near front leg is white ONLY when it is Ramona's LEFT leg, i.e. when
@@ -184,11 +188,9 @@ def mark_side(px, eye, interior, facing):
             if b1 - a1 <= 4:
                 for x in range(a1, b1 + 1): pw(x, y)
 
-def mark_rear(px, interior, sleeping=False):
+def mark_rear(px, interior):
     pw, _ = _mk(px, interior)
     x0,y0,x1,y1 = ibox(interior)
-    if sleeping:
-        return  # pale belly not reliably visible; leave gray body + frost tail
     # white back feet only where they form narrow foot-like runs (skip a wide sit base)
     for y in (y1-1, y1):
         runs = row_runs(interior, y)
@@ -196,6 +198,29 @@ def mark_rear(px, interior, sleeping=False):
             for (a1,b1) in runs:
                 if b1 - a1 <= 3:
                     for x in range(a1, b1+1): pw(x, y)
+
+def mark_sleep(px, interior):
+    # Eyes are closed (no green). Ramona's cue is the pale underside: whiten the
+    # lowest 2 px of each column (belly/chest resting line + tucked/extended paws).
+    # A pink nose is added at the muzzle tip when the head reads at one end (loaf,
+    # stretched); tight curls hide the face, so it is skipped there.
+    pw, pn = _mk(px, interior)
+    cols = defaultdict(list)
+    for (x, y) in interior: cols[x].append(y)
+    for x, ys in cols.items():
+        ym = max(ys)
+        pw(x, ym); pw(x, ym - 1)
+    x0,y0,x1,y1 = ibox(interior)
+    topxs = [x for (x,y) in interior if y <= y0 + 2]          # ears / top of head
+    if not topxs: return
+    headcx = sum(topxs)/len(topxs); bodycx = (x0 + x1)/2
+    if abs(headcx - bodycx) < 0.15*(x1 - x0 + 1): return      # head tucked -> no face
+    left = headcx < bodycx
+    band = [(x,y) for (x,y) in interior if y0 + 2 <= y <= y0 + 8]
+    if not band: return
+    tipx = min(x for x,_ in band) if left else max(x for x,_ in band)
+    ty = max(y for x,y in band if x == tipx)                  # low point of the muzzle
+    pn(tipx, ty)
 
 # ---------------------------------------------------------------------------
 # recolor drivers
@@ -206,17 +231,20 @@ def paint_eyes(px, eyes):
     for (ex,ey) in eyes:
         px[ex,ey] = G; px[ex,ey+1] = G
 
-def recolor_auto(cell):
-    """Full auto recolor: pass1 + eyes + family-driven markings."""
+def recolor_auto(cell, row=None):
+    """Full auto recolor: pass1 + eyes + family-driven markings.
+
+    `row` pins the SLEEP family (see SLEEP_ROWS); everything else is eye-classified.
+    """
     px = cell.load()
     eyes = detect_eyes(cell)
     interior = pass1(px)
     paint_eyes(px, eyes)
-    fam = classify(eyes, interior)
+    fam = classify(eyes, interior, row)
     if fam == "FRONT":         mark_front(px, eyes, interior)
     elif fam == "SIDE-L":      mark_side(px, eyes[0], interior, "left")
     elif fam == "SIDE-R":      mark_side(px, eyes[0], interior, "right")
-    elif fam == "SLEEP":       mark_rear(px, interior, sleeping=True)
+    elif fam == "SLEEP":       mark_sleep(px, interior)
     else:                      mark_rear(px, interior)
     axis = (sum(e[0] for e in eyes)/len(eyes)) if eyes else None
     return {"family": fam, "eyes": eyes, "axis": axis}
@@ -311,7 +339,7 @@ def main():
         axis = (eyes[0][0]+eyes[1][0])/2.0 if len(eyes)==2 else None
         print(f"\neyes (source #d3dfe1): {eyes}")
         print(f"face axis (eye midpoint): {axis}")
-        if interior: print(f"family (auto): {classify(eyes, interior)}")
+        if interior: print(f"family (auto): {classify(eyes, interior, a.row)}")
         return
 
     if a.cmd == "apply":
@@ -319,7 +347,7 @@ def main():
         if a.spec:
             info = recolor(cell, json.load(open(a.spec)))
         else:
-            info = recolor_auto(cell)
+            info = recolor_auto(cell, a.row)
         cell.save(a.out)
         if a.scale:
             cell.resize((64*a.scale, 64*a.scale), Image.NEAREST).save(
@@ -337,7 +365,7 @@ def main():
         fams = Counter(); done = []
         for (r,c) in cells:
             cell = load_frame(a.sheet, r, c)
-            info = recolor_auto(cell)
+            info = recolor_auto(cell, r)
             assert_on_palette(cell, f"r{r}c{c}")
             out = os.path.join(a.outdir, f"r{r}c{c}.png")
             cell.save(out)

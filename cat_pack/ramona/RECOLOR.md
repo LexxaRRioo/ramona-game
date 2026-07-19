@@ -154,17 +154,19 @@ hero frames still override with a `specs/*.json`.
 
 ## Done
 
-- Rows 0–1 cols 0–3 — the 8 directional idle (r0) and stand (r1) frames: front, rear,
-  side-left, side-right. Fronts curated (`sit_43_0.json`, `stand_1_0.json`, with the stand
-  nose dropped one row per owner review); the six rear/side frames from `--auto`. Head kept
-  at source size — a 1–2 px head-shrink was previewed and rejected (silhouette edit would
-  have to propagate to every frame).
+- **Whole sheet (all 387 frames)** recolored via the family engine: hero fronts curated,
+  everything else `--auto`. Output `ramona_sheet.png` (896×4608), fully on-palette,
+  materialized to `ramona_sheet.aseprite` (export verified pixel-identical).
+- Family counts: 120 FRONT, 83 SIDE-L, 83 SIDE-R, 74 REAR, 24 SLEEP, 3 curated.
+- Marking rules per view: only Ramona's **left** front leg is white (viewer's right in
+  front view; near leg in faces-left profile; gray near leg in faces-right). Profile nose
+  sits on the muzzle's forward-most pixel. SLEEP (rows 44–55): pale belly + paws + a nose
+  where the head shows. Head kept at source size (a head-shrink was previewed and rejected).
 
 ## Files
 
-- `ramona_sit_43_0.png` / `.aseprite` — finished frame (43,0), 64×64, 7-color palette.
-- `ramona_r{0,1}c{0..3}_*.png` — the 8 rows-0–1 deliverables.
-- `ramona_rows01_block.png` — the 8 composited into their 256×128 sheet block.
-- `ramona_rows01.aseprite` — the block, materialized with the 7-color Ramona palette
-  (export verified pixel-identical to the block).
+- `ramona_sheet.png` / `.aseprite` — the full recolored sheet, 7-color palette.
+- `ramona_sit_43_0.png` / `.aseprite` — the first finished frame (43,0).
+- `ramona_r{0,1}c{0..3}_*.png` — rows 0–1 cropped as named frames.
+- `ramona_rows01_block.png` / `ramona_rows01.aseprite` — rows 0–1 as a 256×128 block.
 - `RECOLOR.md` — this document.
