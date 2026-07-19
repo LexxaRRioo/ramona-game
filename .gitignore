@@ -4,3 +4,7 @@
 *.xcodeproj
 xcuserdata/
 photos/
+__pycache__/
+
+# recolor scale previews
+*.x*.png

@@ -142,8 +142,29 @@ Result for (43,0): 7 colors, all Zenit, no cold leftovers.
 - Overwriting the dark outline when painting whites — mask paints to interior only.
 - High-contrast tabby stripes — dropped entirely at this resolution.
 
+## Family engine (scaling past hand-authored specs)
+
+The whole 387-frame sheet is 4 marking-families, auto-detected per frame from the eyes and
+silhouette: FRONT (2 eyes), SIDE-L / SIDE-R (1 eye, left/right of centre), REAR (0 eyes),
+SLEEP (0 eyes, wide silhouette). Pass 1 and the eyes are identical for every frame, so the
+only per-pose work is the white markings — and each family places them from the frame's own
+geometry (eye axis, silhouette bbox, muzzle tip, bottom paw-row). SIDE-R is SIDE-L mirrored,
+so 3 placers + a mirror flag cover the sheet. `recolor.py --auto` / `batch` run the engine;
+hero frames still override with a `specs/*.json`.
+
+## Done
+
+- Rows 0–1 cols 0–3 — the 8 directional idle (r0) and stand (r1) frames: front, rear,
+  side-left, side-right. Fronts curated (`sit_43_0.json`, `stand_1_0.json`, with the stand
+  nose dropped one row per owner review); the six rear/side frames from `--auto`. Head kept
+  at source size — a 1–2 px head-shrink was previewed and rejected (silhouette edit would
+  have to propagate to every frame).
+
 ## Files
 
-- `ramona_sit_43_0.png` — finished frame (43,0), 64×64.
-- `ramona_sit_43_0.aseprite` — same, with the 7-color Ramona palette.
+- `ramona_sit_43_0.png` / `.aseprite` — finished frame (43,0), 64×64, 7-color palette.
+- `ramona_r{0,1}c{0..3}_*.png` — the 8 rows-0–1 deliverables.
+- `ramona_rows01_block.png` — the 8 composited into their 256×128 sheet block.
+- `ramona_rows01.aseprite` — the block, materialized with the 7-color Ramona palette
+  (export verified pixel-identical to the block).
 - `RECOLOR.md` — this document.
