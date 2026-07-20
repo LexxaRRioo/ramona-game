@@ -75,8 +75,11 @@ enum CatSprites {
     /// cols 10–13 are a run cycle sharing the row, excluded) - plays once as
     /// she settles down to sleep.
     static let lieDown = CatClip(textures: frames(row: 6, cols: 0..<10), timePerFrame: 0.10, loops: false)
-    /// Slow breathing inside the exact curl lieDown ends on (same row 6, cols
-    /// 8–9) so the sleep loop continues without a pop. A tight curl reads as
-    /// asleep, unlike the head-up loaf rows.
-    static let sleep = CatClip(textures: frames(row: 6, cols: 8..<10), timePerFrame: 0.9, loops: true)
+    /// The final curled pose, held static - the adjacent row-6 frames differ
+    /// too much to loop (they read as the cat rotating), so sleep holds this
+    /// one frame and CatScene layers a gentle vertical "breath" scale over it.
+    static let sleep = CatClip(textures: frames(row: 6, cols: 9..<10), timePerFrame: 1, loops: false)
+    /// Front-facing self-grooming (row 17, paw to face) - "cleans herself",
+    /// a content resting activity she does between walks.
+    static let groom = CatClip(textures: frames(row: 17, cols: 0..<8), timePerFrame: 0.12, loops: true)
 }

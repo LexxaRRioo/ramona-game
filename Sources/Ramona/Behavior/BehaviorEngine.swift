@@ -94,7 +94,8 @@ final class BehaviorEngine {
 
     private func tick() {
         let now = Date()
-        needs.decay(over: now.timeIntervalSince(lastUpdate), traits: species.traits, isSleeping: currentAction == .sleep)
+        let isActive = currentAction == .walk || currentAction == .seekAttention || currentAction == .climb
+        needs.decay(over: now.timeIntervalSince(lastUpdate), traits: species.traits, isSleeping: currentAction == .sleep, isActive: isActive)
         lastUpdate = now
         mood = Mood(needs: needs)
 
@@ -110,7 +111,7 @@ final class BehaviorEngine {
         }
 
         let hour = Double(Calendar.current.component(.hour, from: Date()))
-        let candidates: [CatAction] = [.walk, .idle, .sleep, .seekAttention, .climb]
+        let candidates: [CatAction] = [.walk, .idle, .sleep, .seekAttention, .climb, .groom]
         let scored = candidates.map { action in
             (action, action.score(needs: needs, traits: species.traits, sleepWindows: species.schedule.sleepWindows, hour: hour, windowAvailable: isWindowAvailable))
         }

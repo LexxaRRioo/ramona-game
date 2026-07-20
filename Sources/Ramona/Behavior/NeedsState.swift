@@ -20,7 +20,7 @@ struct NeedsState: Codable {
     /// CatAction.seekAttention.
     var social: Double
 
-    mutating func decay(over elapsed: TimeInterval, traits: SpeciesDefinition.TraitWeights, isSleeping: Bool) {
+    mutating func decay(over elapsed: TimeInterval, traits: SpeciesDefinition.TraitWeights, isSleeping: Bool, isActive: Bool) {
         let hours = elapsed / 3600
         hunger = Self.apply(floor: Self.hungerFloor, rate: Self.hourlyRate(base: 0.1333, trait: traits.foodMotivation), hours: hours, to: hunger)
         if isSleeping {
@@ -33,7 +33,16 @@ struct NeedsState: Codable {
         } else {
             energy = Self.apply(floor: Self.floor, rate: Self.hourlyRate(base: 0.16, trait: traits.laziness), hours: hours, to: energy)
         }
-        play = Self.apply(floor: Self.floor, rate: Self.hourlyRate(base: 0.2667, trait: traits.playfulness), hours: hours, to: play)
+        if isActive {
+            // Being active (walking/climbing/seeking) *satisfies* the play
+            // drive rather than draining it, so a burst of movement fills play,
+            // drops walk's score, and she settles into rest instead of pacing
+            // forever - the whole point of the walk/rest cycle. Faster than the
+            // idle decay below so bursts stay short.
+            play = min(1, play + Self.hourlyRate(base: 12, trait: traits.playfulness) * hours)
+        } else {
+            play = Self.apply(floor: Self.floor, rate: Self.hourlyRate(base: 0.2667, trait: traits.playfulness), hours: hours, to: play)
+        }
         social = Self.apply(floor: Self.floor, rate: Self.hourlyRate(base: 0.2, trait: traits.sociability), hours: hours, to: social)
     }
 

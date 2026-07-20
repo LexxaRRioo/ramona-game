@@ -370,10 +370,20 @@ final class CatScene: SKScene {
             // Not going anywhere - she sits down, then sits and breathes.
             playClip(CatSprites.sitDown, then: CatSprites.sitIdle)
             cat.run(settle)
+        case .groom:
+            // Sits and cleans herself - a content between-walks rest activity.
+            playClip(CatSprites.groom)
+            cat.run(settle)
         case .sleep:
-            // Settles, lies down and curls up, then breathes in her sleep.
+            // Settles, lies down and curls up, then holds the curl. Breathing
+            // is a gentle vertical scale on its own key (not a frame swap), so
+            // she never appears to rotate while asleep.
             playClip(CatSprites.lieDown, then: CatSprites.sleep)
             cat.run(settle)
+            cat.run(.repeatForever(.sequence([
+                .scaleY(to: 0.96, duration: 1.8),
+                .scaleY(to: 1.0, duration: 1.8)
+            ])), withKey: "breath")
         case .seekAttention:
             // "Может в два раза быстрее обычного пробегать из одного угла
             // квартиры в другой" when long ignored - same pacing as .walk,
@@ -420,10 +430,18 @@ final class CatScene: SKScene {
             let move = SKAction.moveTo(x: x, duration: TimeInterval(abs(x - x0) / speed))
             return .sequence([face, move])
         }
-        return .repeatForever(.sequence([
-            leg(to: groundMaxX, from: startX, clip: CatSprites.walkRight),
-            leg(to: groundMinX, from: groundMaxX, clip: CatSprites.walkLeft)
+        // Initial approach from wherever she is to the right end, THEN a clean
+        // min<->max ping-pong. Folding the arbitrary start into the repeating
+        // cycle made each repeat reuse that stale origin, so a return leg's
+        // duration was computed for the wrong distance and she'd cross the
+        // whole width in a fraction of the time - the "teleport" on reaching
+        // an end. The cycle legs below always measure from the true endpoints.
+        let approach = leg(to: groundMaxX, from: startX, clip: CatSprites.walkRight)
+        let cycle = SKAction.repeatForever(.sequence([
+            leg(to: groundMinX, from: groundMaxX, clip: CatSprites.walkLeft),
+            leg(to: groundMaxX, from: groundMinX, clip: CatSprites.walkRight)
         ]))
+        return .sequence([approach, cycle])
     }
 
     private func dropToGround() {

@@ -18,6 +18,9 @@ enum CatAction: Hashable, CaseIterable {
     /// currentSurface, which is the floor unless she's actively climbing,
     /// was just dropped on a window, or that window itself moved under her).
     case climb
+    /// "Cleans herself" - sits and grooms. A content, between-walks rest
+    /// activity, so she isn't pacing whenever she's awake.
+    case groom
 
     /// Human-readable label for the debug "Force Action" menu.
     var debugName: String {
@@ -27,6 +30,7 @@ enum CatAction: Hashable, CaseIterable {
         case .sleep: return "Sleep"
         case .seekAttention: return "Seek Attention"
         case .climb: return "Climb"
+        case .groom: return "Groom"
         }
     }
 
@@ -48,9 +52,13 @@ enum CatAction: Hashable, CaseIterable {
         case .walk:
             return (1 - needs.play) * (0.5 + traits.playfulness) + traits.boldness * 0.2
         case .idle:
-            // Always a modest contender, so it only wins when sleep and
-            // walk both have little reason to.
-            return 0.35
+            // A steady resting default, so she settles rather than paces
+            // whenever nothing else has a strong reason to win.
+            return 0.45
+        case .groom:
+            // Grooms when content and rested (play satisfied, still awake) -
+            // the "cleans herself" lull right after a walk restores her play.
+            return 0.3 + needs.play * 0.25 + needs.energy * 0.1
         case .seekAttention:
             return (1 - needs.social) * (0.5 + traits.sociability)
         case .climb:
