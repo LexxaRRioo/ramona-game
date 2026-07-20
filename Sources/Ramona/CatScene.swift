@@ -13,8 +13,7 @@ final class CatScene: SKScene {
         case window(CGRect)
     }
 
-    private let cat = SKShapeNode(circleOfRadius: 16)
-    private let hitRadius: CGFloat = 22
+    private let cat = SKSpriteNode()
     private let groundMargin: CGFloat = 20
     private let sideMargin: CGFloat = 40
     private let minPerchWidth: CGFloat = 80
@@ -30,6 +29,12 @@ final class CatScene: SKScene {
     /// CatAction.climb targets when it wins, and what setTargetWindow
     /// re-applies live if she happens to already be standing on it.
     private var windowFrame: CGRect?
+    /// The Dock's top edge, when there's a bottom Dock on screen. It's the
+    /// surface Ramona stands on while "on the floor" - she paces along the top
+    /// of the Dock rather than the bare screen edge. nil (auto-hidden Dock, or
+    /// none) falls back to the screen-bottom ground line. Refreshed by
+    /// OverlayWindow's poll and kept here so groundBounds can read it live.
+    private var dockSurface: CGRect?
     private var currentSurface: Surface = .floor
     private var currentAction: CatAction = .walk
     private var lastStalkTime: TimeInterval = 0
@@ -76,8 +81,12 @@ final class CatScene: SKScene {
         backgroundColor = .clear
         scaleMode = .resizeFill
 
-        cat.fillColor = .systemOrange
-        cat.strokeColor = .clear
+        // The 64px cell has ~16px of empty space below her paws; anchoring at
+        // footAnchorY plants her feet on the ground line instead of her center.
+        cat.anchorPoint = CGPoint(x: 0.5, y: CatSprites.footAnchorY)
+        cat.size = CGSize(width: 128, height: 128) // 2x the 64px source cell
+
+        cat.texture = CatSprites.sitIdle.textures.first
         cat.position = CGPoint(x: size.width / 2, y: groundMargin)
         addChild(cat)
 
@@ -191,11 +200,11 @@ final class CatScene: SKScene {
         updateDebugText(action: action, mood: mood, needs: needs)
     }
 
-    /// Scene-local hit test (Phase 4). Bounding-circle only, matching the
-    /// placeholder shape - real per-pixel alpha hit-testing arrives with
-    /// Phase 5 art.
+    /// Scene-local hit test (Phase 4). Bounding-box of the sprite's current
+    /// frame, padded a little so the fluffy edges stay grabbable - true
+    /// per-pixel alpha hit-testing is still a later refinement.
     func hitTest(_ point: CGPoint) -> Bool {
-        hypot(point.x - cat.position.x, point.y - cat.position.y) <= hitRadius
+        cat.frame.insetBy(dx: -4, dy: -4).contains(point)
     }
 
     /// Pins the cat directly to `point` while the user is dragging her,
@@ -306,11 +315,26 @@ final class CatScene: SKScene {
         return CGPoint(x: screenPoint.x - window.frame.origin.x, y: screenPoint.y - window.frame.origin.y)
     }
 
+    /// Called by OverlayWindow's poll with the current Dock frame (or nil when
+    /// it auto-hides). If she's on the floor, re-settles her onto the new
+    /// surface so she steps onto - or off of - the Dock as it appears/hides.
+    func setDockSurface(_ frame: CGRect?) {
+        let changed = frame != dockSurface
+        dockSurface = frame
+        if changed, case .floor = currentSurface, !isInteracting {
+            applyCurrentAction()
+        }
+    }
+
     /// The active ground line - the current window's top edge while
-    /// currentSurface is .window, the screen floor otherwise.
+    /// currentSurface is .window, the Dock's top edge if there's a bottom Dock,
+    /// the bare screen floor otherwise.
     private func groundBounds() -> (y: CGFloat, minX: CGFloat, maxX: CGFloat) {
         if case .window(let frame) = currentSurface, isValidPerch(frame) {
             return (frame.maxY, frame.minX + sideMargin / 2, frame.maxX - sideMargin / 2)
+        }
+        if let dock = dockSurface {
+            return (dock.maxY, dock.minX + sideMargin / 2, dock.maxX - sideMargin / 2)
         }
         return (groundMargin, sideMargin, size.width - sideMargin)
     }
@@ -338,37 +362,51 @@ final class CatScene: SKScene {
         case .walk, .climb:
             // Climbing (Phase 4) reuses the walk visual - only the surface
             // (floor vs. a window's top edge, chosen in apply(action:...))
-            // differs; a distinct climbing animation is a Phase 5 art thing.
+            // differs; a distinct climbing animation is a later art thing.
+            // Face the way she settles; walkLoop then re-picks per leg.
+            playClip(clampedX >= cat.position.x ? CatSprites.walkRight : CatSprites.walkLeft)
             cat.run(.sequence([settle, walkLoop(from: clampedX)]))
         case .idle:
+            // Not going anywhere - she sits and breathes.
+            playClip(CatSprites.sitIdle)
             cat.run(settle)
-            cat.run(.repeatForever(.sequence([
-                .scale(to: 1.05, duration: 1.2),
-                .scale(to: 1.0, duration: 1.2)
-            ])))
         case .sleep:
-            cat.run(.sequence([settle, .scaleX(to: 1.2, y: 0.7, duration: 0.3)]))
-            cat.run(.repeatForever(.sequence([
-                .fadeAlpha(to: 0.7, duration: 1.5),
-                .fadeAlpha(to: 1.0, duration: 1.5)
-            ])))
+            playClip(CatSprites.sleep)
+            cat.run(settle)
         case .seekAttention:
             // "Может в два раза быстрее обычного пробегать из одного угла
             // квартиры в другой" when long ignored - same pacing as .walk,
             // just faster and more visibly urgent.
+            playClip(clampedX >= cat.position.x ? CatSprites.walkRight : CatSprites.walkLeft)
             cat.run(.sequence([settle, walkLoop(from: clampedX, speed: walkSpeed * 2)]))
         }
+    }
+
+    /// Plays a named clip's frames on the cat under the "anim" key, so it runs
+    /// concurrently with whatever positional action (settle, walk legs) is
+    /// moving her. A static clip just swaps the texture. `resize: false` keeps
+    /// the node's fixed 64×64 footprint as frames change.
+    private func playClip(_ clip: CatClip) {
+        cat.removeAction(forKey: "anim")
+        guard let first = clip.textures.first else { return }
+        guard !clip.isStatic else { cat.texture = first; return }
+        let animate = SKAction.animate(with: clip.textures, timePerFrame: clip.timePerFrame, resize: false, restore: false)
+        cat.run(clip.loops ? .repeatForever(animate) : animate, withKey: "anim")
     }
 
     private func walkLoop(from startX: CGFloat, speed: CGFloat? = nil) -> SKAction {
         let speed = speed ?? walkSpeed
         let (_, groundMinX, groundMaxX) = groundBounds()
-        func leg(to x: CGFloat, from x0: CGFloat) -> SKAction {
-            .moveTo(x: x, duration: TimeInterval(abs(x - x0) / speed))
+        // Each leg swaps to the matching directional walk cycle (native left
+        // and right rows on the sheet, not a mirror) the instant it begins.
+        func leg(to x: CGFloat, from x0: CGFloat, clip: CatClip) -> SKAction {
+            let face = SKAction.run { [weak self] in self?.playClip(clip) }
+            let move = SKAction.moveTo(x: x, duration: TimeInterval(abs(x - x0) / speed))
+            return .sequence([face, move])
         }
         return .repeatForever(.sequence([
-            leg(to: groundMaxX, from: startX),
-            leg(to: groundMinX, from: groundMaxX)
+            leg(to: groundMaxX, from: startX, clip: CatSprites.walkRight),
+            leg(to: groundMinX, from: groundMaxX, clip: CatSprites.walkLeft)
         ]))
     }
 
@@ -385,13 +423,14 @@ final class CatScene: SKScene {
     }
 
     private func updateMoodTint(_ mood: Mood) {
+        // Ramona is already fully coloured, so mood only nudges a faint gray
+        // wash over the sprite rather than repainting her - a real per-mood
+        // pose set is future art. colorBlendFactor 0 leaves her untouched.
+        cat.color = .gray
         switch mood {
-        case .happy:
-            cat.fillColor = .systemOrange
-        case .content:
-            cat.fillColor = .systemOrange.blended(withFraction: 0.25, of: .systemGray) ?? .systemOrange
-        case .grumpy:
-            cat.fillColor = .systemOrange.blended(withFraction: 0.65, of: .systemGray) ?? .systemGray
+        case .happy: cat.colorBlendFactor = 0
+        case .content: cat.colorBlendFactor = 0.08
+        case .grumpy: cat.colorBlendFactor = 0.2
         }
     }
 }

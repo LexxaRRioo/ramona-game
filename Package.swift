@@ -10,7 +10,8 @@ let package = Package(
             path: "Sources/Ramona",
             resources: [
                 .copy("Resources/Species"),
-                .copy("Resources/Items")
+                .copy("Resources/Items"),
+                .copy("Resources/Sprites")
             ]
         )
     ]

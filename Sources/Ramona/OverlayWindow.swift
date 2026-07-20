@@ -56,6 +56,7 @@ final class OverlayWindow: NSPanel {
     let catScene: CatScene
     let skView: SKView
     private var hoverPollTimer: Timer?
+    private var dockPollTimer: Timer?
 
     init(screen: NSScreen) {
         catScene = CatScene(size: screen.frame.size)
@@ -72,7 +73,10 @@ final class OverlayWindow: NSPanel {
         backgroundColor = .clear
         hasShadow = false
         ignoresMouseEvents = true
-        level = .floating
+        // One level above the Dock's own window so Ramona walks *on* the Dock
+        // rather than behind it, while still sitting below the menu bar and its
+        // status items (dockWindow < mainMenu/statusBar).
+        level = NSWindow.Level(rawValue: Int(CGWindowLevelForKey(.dockWindow)) + 1)
         collectionBehavior = [.canJoinAllSpaces, .stationary, .fullScreenAuxiliary, .ignoresCycle]
         isReleasedWhenClosed = false
 
@@ -97,11 +101,24 @@ final class OverlayWindow: NSPanel {
         hoverPollTimer = Timer.scheduledTimer(withTimeInterval: 1.0 / 30, repeats: true) { [weak self] _ in
             self?.pollHover()
         }
+        // Much lazier than hover polling - the Dock only moves when it hides,
+        // resizes, or magnifies - but shares the same pause lifecycle so it
+        // stops cleanly on screen lock / quiet mode.
+        pollDock()
+        dockPollTimer = Timer.scheduledTimer(withTimeInterval: 1.5, repeats: true) { [weak self] _ in
+            self?.pollDock()
+        }
     }
 
     func stopHoverTracking() {
         hoverPollTimer?.invalidate()
         hoverPollTimer = nil
+        dockPollTimer?.invalidate()
+        dockPollTimer = nil
+    }
+
+    private func pollDock() {
+        catScene.setDockSurface(Dock.bottomFrame())
     }
 
     private func pollHover() {

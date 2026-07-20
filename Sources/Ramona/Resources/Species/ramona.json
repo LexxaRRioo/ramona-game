@@ -1,7 +1,7 @@
 {
     "id": "ramona",
     "displayName": "Ramona",
-    "spriteSet": "placeholder",
+    "spriteSet": "ramona_sheet",
     "traits": {
         "playfulness": 0.8,
         "laziness": 0.35,
