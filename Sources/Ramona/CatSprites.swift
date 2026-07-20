@@ -8,6 +8,21 @@ struct CatClip {
     let textures: [SKTexture]
     let timePerFrame: TimeInterval
     let loops: Bool
+    /// Per-frame override for the sprite node's anchorPoint.y, parallel to
+    /// `textures`. nil (the common case) uses CatSprites.footAnchorY for
+    /// every frame. Only clips whose pose occupies a different vertical
+    /// slice of the 64px cell than the walk/sit baseline need this - e.g.
+    /// lieDown, where she progressively curls up and occupies less cell
+    /// height, so anchoring at the walk/sit fraction left a growing gap
+    /// under her ("floating" instead of settling onto the surface).
+    let groundAnchors: [CGFloat]?
+
+    init(textures: [SKTexture], timePerFrame: TimeInterval, loops: Bool, groundAnchors: [CGFloat]? = nil) {
+        self.textures = textures
+        self.timePerFrame = timePerFrame
+        self.loops = loops
+        self.groundAnchors = groundAnchors
+    }
 
     var isStatic: Bool { textures.count <= 1 }
 }
@@ -71,14 +86,22 @@ enum CatSprites {
     /// Front-facing sitting idle - a gentle breathing loop, what she does when
     /// she's just hanging out and not walking anywhere.
     static let sitIdle = CatClip(textures: frames(row: 19, cols: 0..<5), timePerFrame: 0.28, loops: true)
+    /// Measured directly off the sheet (lowest opaque pixel row per frame,
+    /// cols 0-9 of row 6): 45,45,45,45,44,44,41,41,40,40, vs. the walk/sit
+    /// baseline's 47. Converted to anchorPoint.y fractions (1 - bottomRow/64)
+    /// - she curls up over the transition and the empty space below her
+    /// grows from ~2px to ~7px, so the anchor has to climb to match.
+    static let lieDownGroundAnchors: [CGFloat] = [0.297, 0.297, 0.297, 0.297, 0.3125, 0.3125, 0.3594, 0.3594, 0.375, 0.375]
     /// Lie-down-and-curl transition (row 6, cols 0–9: loaf → flatten → curl;
     /// cols 10–13 are a run cycle sharing the row, excluded) - plays once as
     /// she settles down to sleep.
-    static let lieDown = CatClip(textures: frames(row: 6, cols: 0..<10), timePerFrame: 0.10, loops: false)
+    static let lieDown = CatClip(textures: frames(row: 6, cols: 0..<10), timePerFrame: 0.10, loops: false, groundAnchors: lieDownGroundAnchors)
     /// The final curled pose, held static - the adjacent row-6 frames differ
     /// too much to loop (they read as the cat rotating), so sleep holds this
     /// one frame and CatScene layers a gentle vertical "breath" scale over it.
-    static let sleep = CatClip(textures: frames(row: 6, cols: 9..<10), timePerFrame: 1, loops: false)
+    /// groundAnchors carries the same col-9 anchor as lieDown's last frame,
+    /// so there's no pop at the hand-off.
+    static let sleep = CatClip(textures: frames(row: 6, cols: 9..<10), timePerFrame: 1, loops: false, groundAnchors: [0.375])
     /// Front-facing self-grooming (row 17, paw to face) - "cleans herself",
     /// a content resting activity she does between walks.
     static let groom = CatClip(textures: frames(row: 17, cols: 0..<8), timePerFrame: 0.12, loops: true)

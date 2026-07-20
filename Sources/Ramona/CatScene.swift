@@ -401,23 +401,52 @@ final class CatScene: SKScene {
     private func playClip(_ clip: CatClip, then next: CatClip? = nil) {
         cat.removeAction(forKey: "anim")
         guard let first = clip.textures.first else { return }
+        applyGroundAnchor(clip, frame: 0)
         guard !clip.isStatic else {
             cat.texture = first
             if let next { playClip(next) }
             return
         }
-        let intro = SKAction.animate(with: clip.textures, timePerFrame: clip.timePerFrame, resize: false, restore: false)
+        let intro = animateAction(for: clip)
         guard !clip.loops, let next, let nextFirst = next.textures.first else {
             cat.run(clip.loops ? .repeatForever(intro) : intro, withKey: "anim")
             return
         }
         let loop: SKAction = next.isStatic
-            ? .setTexture(nextFirst)
+            ? .sequence([.setTexture(nextFirst), .run { [weak self] in self?.applyGroundAnchor(next, frame: 0) }])
             : {
-                let a = SKAction.animate(with: next.textures, timePerFrame: next.timePerFrame, resize: false, restore: false)
+                let a = animateAction(for: next)
                 return next.loops ? .repeatForever(a) : a
             }()
         cat.run(.sequence([intro, loop]), withKey: "anim")
+    }
+
+    /// Sets the node's anchorPoint.y for the given clip/frame - CatSprites.
+    /// footAnchorY for the common case, or that clip's own per-frame override
+    /// (see CatClip.groundAnchors) for poses like lieDown/sleep whose visual
+    /// "ground contact" sits elsewhere in the 64px cell. Independent of
+    /// cat.position, which settle/walk own exclusively, so this never fights
+    /// them for the same property.
+    private func applyGroundAnchor(_ clip: CatClip, frame: Int) {
+        cat.anchorPoint = CGPoint(x: 0.5, y: clip.groundAnchors?[frame] ?? CatSprites.footAnchorY)
+    }
+
+    /// Like SKAction.animate(with:timePerFrame:resize:restore:), plus a
+    /// synchronized anchorPoint update per frame for clips that need one.
+    private func animateAction(for clip: CatClip) -> SKAction {
+        guard clip.groundAnchors != nil else {
+            return SKAction.animate(with: clip.textures, timePerFrame: clip.timePerFrame, resize: false, restore: false)
+        }
+        let steps = clip.textures.indices.map { i in
+            SKAction.sequence([
+                .run { [weak self] in
+                    self?.cat.texture = clip.textures[i]
+                    self?.applyGroundAnchor(clip, frame: i)
+                },
+                .wait(forDuration: clip.timePerFrame)
+            ])
+        }
+        return .sequence(steps)
     }
 
     private func walkLoop(from startX: CGFloat, speed: CGFloat? = nil) -> SKAction {
