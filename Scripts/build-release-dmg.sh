@@ -1,8 +1,13 @@
 #!/bin/bash
 # Builds a release .app bundle and wraps it in a .dmg for distribution.
-# Unsigned by design (plan.md: "unsigned .dmg via GitHub Releases") - no
-# Apple Developer account required. Gatekeeper will quarantine it on
-# download; users need the right-click > Open flow documented in README.md.
+# Unsigned (no Developer ID) by design (plan.md: "unsigned .dmg via GitHub
+# Releases") - no Apple Developer account required. The bundle still gets
+# an ad-hoc codesign pass below: without it, the bundle's signature (from
+# SwiftPM's linker-signed executable) doesn't cover Contents/Resources, and
+# Gatekeeper reports the whole app as "damaged" - a hard failure with no
+# user override, unlike the recoverable "Apple could not verify" prompt an
+# ad-hoc-signed-but-unnotarized app gets (System Settings > Privacy &
+# Security > Open Anyway) which matches the flow documented in README.md.
 set -euo pipefail
 
 cd "$(dirname "$0")/.."
@@ -54,6 +59,8 @@ cat > "${CONTENTS}/Info.plist" <<PLIST
 </dict>
 </plist>
 PLIST
+
+codesign --force --deep --sign - "$APP_BUNDLE"
 
 ln -s /Applications "${STAGING_DIR}/Applications"
 
