@@ -1,4 +1,5 @@
 import AppKit
+import Sparkle
 
 final class AppDelegate: NSObject, NSApplicationDelegate {
     private var overlayWindowController: OverlayWindowController?
@@ -7,6 +8,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var behaviorEngine: BehaviorEngine?
     private var species: SpeciesDefinition?
     private var items: [ItemDefinition] = []
+    /// Reads SUFeedURL/SUPublicEDKey/SUEnableAutomaticChecks from Info.plist
+    /// (set by the build scripts from the repo-root VERSION-adjacent appcast
+    /// URL) - startingUpdater: true begins the automatic-check schedule
+    /// immediately rather than waiting for the first manual check.
+    private var updaterController: SPUStandardUpdaterController?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         NSApp.setActivationPolicy(.accessory)
@@ -19,10 +25,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         startBehaviorEngine()
         observeScreenLock()
         startAccessibilityFlow()
+        updaterController = SPUStandardUpdaterController(startingUpdater: true, updaterDelegate: nil, userDriverDelegate: nil)
 
         DebugSettings.shared.onChange = { [weak self] visible in
             self?.overlayWindowController?.catScene.setDebugVisible(visible)
         }
+    }
+
+    /// Menu bar "Check for Updates…" (RamonaApp).
+    func checkForUpdates() {
+        updaterController?.checkForUpdates(nil)
     }
 
     func applicationWillTerminate(_ notification: Notification) {

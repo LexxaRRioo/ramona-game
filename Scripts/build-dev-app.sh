@@ -32,6 +32,27 @@ rm -rf "$APP_BUNDLE"
 mkdir -p "$MACOS_DIR"
 cp "${BUILD_DIR}/${APP_NAME}" "${MACOS_DIR}/${APP_NAME}"
 
+# SwiftPM links Sparkle.framework via @rpath, resolved against @loader_path
+# (Contents/MacOS/) by default - that only finds a framework sitting right
+# next to the executable, not the conventional Contents/Frameworks/ location
+# below. Patching in an extra rpath keeps the standard bundle layout instead
+# of dumping the framework in MacOS/. Must happen before signing - it
+# invalidates whatever signature was already on the binary.
+install_name_tool -add_rpath "@executable_path/../Frameworks" "${MACOS_DIR}/${APP_NAME}"
+
+FRAMEWORKS_DIR="${CONTENTS}/Frameworks"
+mkdir -p "$FRAMEWORKS_DIR"
+cp -R "${BUILD_DIR}/Sparkle.framework" "${FRAMEWORKS_DIR}/"
+SPARKLE_VERSIONED="${FRAMEWORKS_DIR}/Sparkle.framework/Versions/B"
+# Order matters: leaf XPC services/helpers first, framework wrapper last,
+# then the outer app WITHOUT --deep below - Sparkle's own docs warn --deep
+# on the app corrupts the XPC services' signatures if applied afterward.
+codesign --force --sign "$SIGNING_IDENTITY" "${SPARKLE_VERSIONED}/XPCServices/Downloader.xpc"
+codesign --force --sign "$SIGNING_IDENTITY" "${SPARKLE_VERSIONED}/XPCServices/Installer.xpc"
+codesign --force --sign "$SIGNING_IDENTITY" "${SPARKLE_VERSIONED}/Updater.app"
+codesign --force --sign "$SIGNING_IDENTITY" "${SPARKLE_VERSIONED}/Autoupdate"
+codesign --force --sign "$SIGNING_IDENTITY" "${FRAMEWORKS_DIR}/Sparkle.framework"
+
 # Bundled resources (Species/ramona.json etc.) are deliberately NOT copied
 # into the .app: SwiftPM's generated Bundle.module accessor falls back to
 # the absolute build-directory path baked in at compile time when it can't
@@ -60,11 +81,17 @@ cat > "${CONTENTS}/Info.plist" <<PLIST
     <string>${VERSION}</string>
     <key>LSUIElement</key>
     <true/>
+    <key>SUFeedURL</key>
+    <string>https://raw.githubusercontent.com/LexxaRRioo/ramona-game/main/appcast.xml</string>
+    <key>SUPublicEDKey</key>
+    <string>fQ6KeKg+0wlcdgUrrMke//RIz5HMdyfL1r8/hurfz/w=</string>
+    <key>SUEnableAutomaticChecks</key>
+    <false/>
 </dict>
 </plist>
 PLIST
 
-codesign --force --deep --sign "$SIGNING_IDENTITY" "$APP_BUNDLE"
+codesign --force --sign "$SIGNING_IDENTITY" "$APP_BUNDLE"
 
 echo "Built ${APP_BUNDLE}"
 echo "Run: open ${APP_BUNDLE}"

@@ -26,6 +26,9 @@ struct RamonaApp: App {
                 .onChange(of: launchAtLoginEnabled) { _, enabled in
                     LaunchAtLogin.setEnabled(enabled)
                 }
+            Button("Check for Updates…") {
+                appDelegate.checkForUpdates()
+            }
             Divider()
             Menu("Debug") {
                 Text("Version \(AppVersion.current)")

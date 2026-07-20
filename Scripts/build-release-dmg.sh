@@ -39,6 +39,27 @@ cp "${BUILD_DIR}/${APP_NAME}" "${MACOS_DIR}/${APP_NAME}"
 # .app is Contents/Resources - the standard, portable location.
 cp -R "${BUILD_DIR}/${APP_NAME}_${APP_NAME}.bundle" "${RESOURCES_DIR}/"
 
+# SwiftPM links Sparkle.framework via @rpath, resolved against @loader_path
+# (Contents/MacOS/) by default - that only finds a framework sitting right
+# next to the executable, not the conventional Contents/Frameworks/ location
+# below. Patching in an extra rpath keeps the standard bundle layout instead
+# of dumping the framework in MacOS/. Must happen before signing - it
+# invalidates whatever signature was already on the binary.
+install_name_tool -add_rpath "@executable_path/../Frameworks" "${MACOS_DIR}/${APP_NAME}"
+
+FRAMEWORKS_DIR="${CONTENTS}/Frameworks"
+mkdir -p "$FRAMEWORKS_DIR"
+cp -R "${BUILD_DIR}/Sparkle.framework" "${FRAMEWORKS_DIR}/"
+SPARKLE_VERSIONED="${FRAMEWORKS_DIR}/Sparkle.framework/Versions/B"
+# Order matters: leaf XPC services/helpers first, framework wrapper last,
+# then the outer app WITHOUT --deep below - Sparkle's own docs warn --deep
+# on the app corrupts the XPC services' signatures if applied afterward.
+codesign --force --sign - "${SPARKLE_VERSIONED}/XPCServices/Downloader.xpc"
+codesign --force --sign - "${SPARKLE_VERSIONED}/XPCServices/Installer.xpc"
+codesign --force --sign - "${SPARKLE_VERSIONED}/Updater.app"
+codesign --force --sign - "${SPARKLE_VERSIONED}/Autoupdate"
+codesign --force --sign - "${FRAMEWORKS_DIR}/Sparkle.framework"
+
 cat > "${CONTENTS}/Info.plist" <<PLIST
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
@@ -60,11 +81,17 @@ cat > "${CONTENTS}/Info.plist" <<PLIST
     <true/>
     <key>LSMinimumSystemVersion</key>
     <string>14.0</string>
+    <key>SUFeedURL</key>
+    <string>https://raw.githubusercontent.com/LexxaRRioo/ramona-game/main/appcast.xml</string>
+    <key>SUPublicEDKey</key>
+    <string>fQ6KeKg+0wlcdgUrrMke//RIz5HMdyfL1r8/hurfz/w=</string>
+    <key>SUEnableAutomaticChecks</key>
+    <true/>
 </dict>
 </plist>
 PLIST
 
-codesign --force --deep --sign - "$APP_BUNDLE"
+codesign --force --sign - "$APP_BUNDLE"
 
 ln -s /Applications "${STAGING_DIR}/Applications"
 
