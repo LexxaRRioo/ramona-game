@@ -12,7 +12,9 @@ set -euo pipefail
 
 cd "$(dirname "$0")/.."
 
-VERSION="${1:-0.1}"
+# VERSION file is the single source of truth (see plan.md > Versioning);
+# override only for one-off test builds, e.g. build-release-dmg.sh 0.0.3-test.
+VERSION="${1:-$(cat VERSION)}"
 APP_NAME="Ramona"
 BUNDLE_ID="dev.ramona.Ramona"
 BUILD_DIR=".build/release"
@@ -51,6 +53,8 @@ cat > "${CONTENTS}/Info.plist" <<PLIST
     <key>CFBundlePackageType</key>
     <string>APPL</string>
     <key>CFBundleShortVersionString</key>
+    <string>${VERSION}</string>
+    <key>CFBundleVersion</key>
     <string>${VERSION}</string>
     <key>LSUIElement</key>
     <true/>

@@ -64,8 +64,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     func setQuietMode(_ enabled: Bool) {
         if enabled {
             behaviorEngine?.pause()
+            windowTracker?.pause()
         } else {
             behaviorEngine?.start()
+            windowTracker?.resume()
         }
         overlayWindowController?.setQuietMode(enabled)
     }
@@ -117,10 +119,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         center.addObserver(forName: Notification.Name("com.apple.screenIsLocked"), object: nil, queue: .main) { [weak self] _ in
             self?.behaviorEngine?.pause()
             self?.overlayWindowController?.setPaused(true)
+            self?.windowTracker?.pause()
         }
         center.addObserver(forName: Notification.Name("com.apple.screenIsUnlocked"), object: nil, queue: .main) { [weak self] _ in
             self?.overlayWindowController?.setPaused(false)
             self?.behaviorEngine?.start()
+            self?.windowTracker?.resume()
         }
     }
 

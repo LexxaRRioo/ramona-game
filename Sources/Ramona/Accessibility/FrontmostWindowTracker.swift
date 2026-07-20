@@ -17,6 +17,15 @@ final class FrontmostWindowTracker {
     private var currentAppElement: AXUIElement?
     private var currentWindowElement: AXUIElement?
     private var workspaceObserver: NSObjectProtocol?
+    private var framePollTimer: Timer?
+    /// Dedup key for reportCurrentFrame - many apps (Chrome, Electron, etc.)
+    /// never fire kAXMovedNotification during a live drag, only on drop, or
+    /// not at all, which used to leave the cat's surface stuck at a stale
+    /// frame while the real window moved out from under her. framePollTimer
+    /// below re-reads the live frame on a short interval as a fallback; this
+    /// dedup keeps that from also spamming onFrameChange (and restarting her
+    /// walk animation) every tick when nothing actually moved.
+    private var lastReportedFrame: CGRect?
 
     init() {
         workspaceObserver = NSWorkspace.shared.notificationCenter.addObserver(
@@ -31,6 +40,8 @@ final class FrontmostWindowTracker {
         if let frontmost = NSWorkspace.shared.frontmostApplication {
             trackApplication(pid: frontmost.processIdentifier)
         }
+
+        resume()
     }
 
     deinit {
@@ -38,6 +49,21 @@ final class FrontmostWindowTracker {
             NSWorkspace.shared.notificationCenter.removeObserver(workspaceObserver)
         }
         stopObservingCurrentApp()
+        framePollTimer?.invalidate()
+    }
+
+    /// Stops the fallback poll (e.g. screen lock, quiet mode) - AX push
+    /// notifications cost nothing at rest so only the timer needs pausing.
+    func pause() {
+        framePollTimer?.invalidate()
+        framePollTimer = nil
+    }
+
+    func resume() {
+        guard framePollTimer == nil else { return }
+        framePollTimer = Timer.scheduledTimer(withTimeInterval: 0.2, repeats: true) { [weak self] _ in
+            self?.reportCurrentFrame()
+        }
     }
 
     private func trackApplication(pid: pid_t) {
@@ -48,7 +74,7 @@ final class FrontmostWindowTracker {
 
         var observer: AXObserver?
         guard AXObserverCreate(pid, Self.axCallback, &observer) == .success, let observer else {
-            onFrameChange?(nil)
+            reportCurrentFrame()
             return
         }
         appObserver = observer
@@ -65,7 +91,7 @@ final class FrontmostWindowTracker {
 
         var focusedWindow: AnyObject?
         guard AXUIElementCopyAttributeValue(appElement, kAXFocusedWindowAttribute as CFString, &focusedWindow) == .success else {
-            onFrameChange?(nil)
+            reportCurrentFrame()
             return
         }
         let windowElement = focusedWindow as! AXUIElement
@@ -82,11 +108,10 @@ final class FrontmostWindowTracker {
     }
 
     private func reportCurrentFrame() {
-        guard let windowElement = currentWindowElement else {
-            onFrameChange?(nil)
-            return
-        }
-        onFrameChange?(Self.cocoaFrame(of: windowElement))
+        let frame = currentWindowElement.flatMap { Self.cocoaFrame(of: $0) }
+        guard frame != lastReportedFrame else { return }
+        lastReportedFrame = frame
+        onFrameChange?(frame)
     }
 
     private func stopObservingCurrentWindow() {
@@ -190,7 +215,7 @@ final class FrontmostWindowTracker {
             }
         case kAXUIElementDestroyedNotification:
             tracker.stopObservingCurrentWindow()
-            tracker.onFrameChange?(nil)
+            tracker.reportCurrentFrame()
         case kAXMovedNotification, kAXResizedNotification:
             tracker.reportCurrentFrame()
         default:

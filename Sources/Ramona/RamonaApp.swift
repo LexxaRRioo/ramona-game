@@ -28,6 +28,8 @@ struct RamonaApp: App {
                 }
             Divider()
             Menu("Debug") {
+                Text("Version \(AppVersion.current)")
+                Divider()
                 Toggle("Debug Info (HUD)", isOn: $debugInfoVisible)
                     .onChange(of: debugInfoVisible) { _, visible in
                         DebugSettings.shared.isVisible = visible

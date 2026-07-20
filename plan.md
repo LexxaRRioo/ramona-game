@@ -23,6 +23,10 @@
  - V1 scope: living cat + feeding (canned chicken) + toys (cable ties, cable wire, beaver doll). Two-cat interactions deferred.
  - Distribution: unsigned .dmg via GitHub Releases, auto-update via Sparkle. Signing may be added later without codechanges.
  - Content language: Russian where text appears; UI minimal English.
+ - Versioning: semver (MAJOR.MINOR.PATCH), tracked in the repo-root VERSION file - the single source of truth both build scripts read for
+ CFBundleShortVersionString/CFBundleVersion, and what the Debug menu displays at runtime. Bump PATCH for any code change (bug fix, tweak, internal
+ refactor - the default when in doubt). Bump MINOR for a backward-compatible addition (new feature, extends existing behavior). Bump MAJOR when it's not
+ just an extension of the previous code (breaking change, rewrite of a subsystem).
 
  Architecture
 

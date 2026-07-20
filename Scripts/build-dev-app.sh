@@ -15,6 +15,11 @@ cd "$(dirname "$0")/.."
 
 swift build
 
+# VERSION file is the single source of truth (see plan.md > Versioning).
+# "-dev" suffix keeps a locally-built copy visually distinct in the Debug
+# menu's version display from whatever's actually installed in
+# /Applications - both can be at the same VERSION number without this.
+VERSION="$(cat VERSION)-dev"
 APP_NAME="Ramona"
 BUNDLE_ID="dev.ramona.Ramona"
 SIGNING_IDENTITY="Ramona Dev"
@@ -50,7 +55,9 @@ cat > "${CONTENTS}/Info.plist" <<PLIST
     <key>CFBundlePackageType</key>
     <string>APPL</string>
     <key>CFBundleShortVersionString</key>
-    <string>0.1</string>
+    <string>${VERSION}</string>
+    <key>CFBundleVersion</key>
+    <string>${VERSION}</string>
     <key>LSUIElement</key>
     <true/>
 </dict>
