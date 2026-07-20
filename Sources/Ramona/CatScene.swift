@@ -367,11 +367,12 @@ final class CatScene: SKScene {
             playClip(clampedX >= cat.position.x ? CatSprites.walkRight : CatSprites.walkLeft)
             cat.run(.sequence([settle, walkLoop(from: clampedX)]))
         case .idle:
-            // Not going anywhere - she sits and breathes.
-            playClip(CatSprites.sitIdle)
+            // Not going anywhere - she sits down, then sits and breathes.
+            playClip(CatSprites.sitDown, then: CatSprites.sitIdle)
             cat.run(settle)
         case .sleep:
-            playClip(CatSprites.sleep)
+            // Settles, lies down and curls up, then breathes in her sleep.
+            playClip(CatSprites.lieDown, then: CatSprites.sleep)
             cat.run(settle)
         case .seekAttention:
             // "Может в два раза быстрее обычного пробегать из одного угла
@@ -384,14 +385,29 @@ final class CatScene: SKScene {
 
     /// Plays a named clip's frames on the cat under the "anim" key, so it runs
     /// concurrently with whatever positional action (settle, walk legs) is
-    /// moving her. A static clip just swaps the texture. `resize: false` keeps
-    /// the node's fixed 64×64 footprint as frames change.
-    private func playClip(_ clip: CatClip) {
+    /// moving her. `resize: false` keeps the node's fixed footprint as frames
+    /// change. Pass `then:` to play a one-shot intro (e.g. sitting down) and
+    /// hand off to a looping clip (e.g. the breathing sit) when it finishes.
+    private func playClip(_ clip: CatClip, then next: CatClip? = nil) {
         cat.removeAction(forKey: "anim")
         guard let first = clip.textures.first else { return }
-        guard !clip.isStatic else { cat.texture = first; return }
-        let animate = SKAction.animate(with: clip.textures, timePerFrame: clip.timePerFrame, resize: false, restore: false)
-        cat.run(clip.loops ? .repeatForever(animate) : animate, withKey: "anim")
+        guard !clip.isStatic else {
+            cat.texture = first
+            if let next { playClip(next) }
+            return
+        }
+        let intro = SKAction.animate(with: clip.textures, timePerFrame: clip.timePerFrame, resize: false, restore: false)
+        guard !clip.loops, let next, let nextFirst = next.textures.first else {
+            cat.run(clip.loops ? .repeatForever(intro) : intro, withKey: "anim")
+            return
+        }
+        let loop: SKAction = next.isStatic
+            ? .setTexture(nextFirst)
+            : {
+                let a = SKAction.animate(with: next.textures, timePerFrame: next.timePerFrame, resize: false, restore: false)
+                return next.loops ? .repeatForever(a) : a
+            }()
+        cat.run(.sequence([intro, loop]), withKey: "anim")
     }
 
     private func walkLoop(from startX: CGFloat, speed: CGFloat? = nil) -> SKAction {

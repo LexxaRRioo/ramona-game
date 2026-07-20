@@ -64,9 +64,19 @@ enum CatSprites {
     static let walkLeft = CatClip(textures: frames(row: 4, cols: 0..<6), timePerFrame: 0.11, loops: true)
     /// Faces right; the sheet ships this as its own row rather than a flip.
     static let walkRight = CatClip(textures: frames(row: 5, cols: 0..<6), timePerFrame: 0.11, loops: true)
+    /// Front-facing sit-down settle - plays once as she comes to rest, then
+    /// hands off to sitIdle's breathing loop (both are the same front-sit pose
+    /// family, so they connect without a pop).
+    static let sitDown = CatClip(textures: frames(row: 43, cols: 0..<7), timePerFrame: 0.09, loops: false)
     /// Front-facing sitting idle - a gentle breathing loop, what she does when
     /// she's just hanging out and not walking anywhere.
     static let sitIdle = CatClip(textures: frames(row: 19, cols: 0..<5), timePerFrame: 0.28, loops: true)
-    /// Front-facing loaf, slow breathing - stands in for sleep.
-    static let sleep = CatClip(textures: frames(row: 44, cols: 0..<2), timePerFrame: 0.9, loops: true)
+    /// Lie-down-and-curl transition (row 6, cols 0–9: loaf → flatten → curl;
+    /// cols 10–13 are a run cycle sharing the row, excluded) - plays once as
+    /// she settles down to sleep.
+    static let lieDown = CatClip(textures: frames(row: 6, cols: 0..<10), timePerFrame: 0.10, loops: false)
+    /// Slow breathing inside the exact curl lieDown ends on (same row 6, cols
+    /// 8–9) so the sleep loop continues without a pop. A tight curl reads as
+    /// asleep, unlike the head-up loaf rows.
+    static let sleep = CatClip(textures: frames(row: 6, cols: 8..<10), timePerFrame: 0.9, loops: true)
 }
