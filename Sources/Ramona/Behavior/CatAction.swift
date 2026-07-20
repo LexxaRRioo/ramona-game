@@ -2,7 +2,7 @@ import Foundation
 
 /// The placeholder-era state machine's states. Real content (feeding, toys,
 /// meme behaviors) arrives in later phases as more cases / richer scoring.
-enum CatAction: Equatable {
+enum CatAction: Hashable, CaseIterable {
     case walk
     case idle
     case sleep
@@ -18,6 +18,17 @@ enum CatAction: Equatable {
     /// currentSurface, which is the floor unless she's actively climbing,
     /// was just dropped on a window, or that window itself moved under her).
     case climb
+
+    /// Human-readable label for the debug "Force Action" menu.
+    var debugName: String {
+        switch self {
+        case .walk: return "Walk"
+        case .idle: return "Sit / Idle"
+        case .sleep: return "Sleep"
+        case .seekAttention: return "Seek Attention"
+        case .climb: return "Climb"
+        }
+    }
 
     /// Utility AI: each candidate scores itself from needs/traits/time of
     /// day; BehaviorEngine runs the highest scorer. Nothing here rules an

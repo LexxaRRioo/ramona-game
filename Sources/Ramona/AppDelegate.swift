@@ -51,6 +51,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         overlayWindowController?.catScene.playToyPulse()
     }
 
+    /// Debug menu "Force Action" - pins the cat to a chosen action for
+    /// previewing animations, or nil to resume autonomous behavior.
+    func forceAction(_ action: CatAction?) {
+        behaviorEngine?.setForcedAction(action)
+    }
+
     /// Menu bar "Quiet Mode" - user-toggled hide, e.g. during screen
     /// sharing. Pauses the same engine as screen-lock (see
     /// observeScreenLock) rather than letting her keep deciding/decaying

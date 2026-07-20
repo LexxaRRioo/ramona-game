@@ -6,6 +6,8 @@ struct RamonaApp: App {
     @State private var debugInfoVisible = false
     @State private var quietModeEnabled = false
     @State private var launchAtLoginEnabled = LaunchAtLogin.isEnabled
+    /// nil = autonomous behavior; a value pins that action (debug preview).
+    @State private var forcedAction: CatAction? = nil
 
     var body: some Scene {
         MenuBarExtra("Ramona", systemImage: "cat.fill") {
@@ -25,10 +27,23 @@ struct RamonaApp: App {
                     LaunchAtLogin.setEnabled(enabled)
                 }
             Divider()
-            Toggle("Debug Info", isOn: $debugInfoVisible)
-                .onChange(of: debugInfoVisible) { _, visible in
-                    DebugSettings.shared.isVisible = visible
+            Menu("Debug") {
+                Toggle("Debug Info (HUD)", isOn: $debugInfoVisible)
+                    .onChange(of: debugInfoVisible) { _, visible in
+                        DebugSettings.shared.isVisible = visible
+                    }
+                Divider()
+                Picker("Force Action", selection: $forcedAction) {
+                    Text("Auto (behavior)").tag(CatAction?.none)
+                    ForEach(CatAction.allCases, id: \.self) { action in
+                        Text(action.debugName).tag(CatAction?.some(action))
+                    }
                 }
+                .pickerStyle(.inline)
+                .onChange(of: forcedAction) { _, action in
+                    appDelegate.forceAction(action)
+                }
+            }
             Divider()
             Button("Quit Ramona") {
                 NSApplication.shared.terminate(nil)

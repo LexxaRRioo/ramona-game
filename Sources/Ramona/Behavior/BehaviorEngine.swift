@@ -21,6 +21,9 @@ final class BehaviorEngine {
     /// CatAction.climb's score. Kept up to date by AppDelegate from the
     /// same live tracking CatScene uses (see FrontmostWindowTracker).
     private var isWindowAvailable = false
+    /// Debug override (menu bar "Force Action"). When set, scoring is bypassed
+    /// and this action is pinned every tick; nil restores autonomous behavior.
+    private var forcedAction: CatAction?
 
     init(species: SpeciesDefinition, saveState: CatSaveState?) {
         self.species = species
@@ -81,6 +84,14 @@ final class BehaviorEngine {
         isWindowAvailable = available
     }
 
+    /// Menu bar "Force Action" debug control. Pass an action to pin it, or nil
+    /// to hand control back to the utility AI. Re-evaluates immediately so the
+    /// cat reacts without waiting for the next tick.
+    func setForcedAction(_ action: CatAction?) {
+        forcedAction = action
+        evaluateAction()
+    }
+
     private func tick() {
         let now = Date()
         needs.decay(over: now.timeIntervalSince(lastUpdate), traits: species.traits, isSleeping: currentAction == .sleep)
@@ -92,6 +103,12 @@ final class BehaviorEngine {
     }
 
     private func evaluateAction() {
+        if let forcedAction {
+            currentAction = forcedAction
+            onStateChange?(currentAction, mood)
+            return
+        }
+
         let hour = Double(Calendar.current.component(.hour, from: Date()))
         let candidates: [CatAction] = [.walk, .idle, .sleep, .seekAttention, .climb]
         let scored = candidates.map { action in
