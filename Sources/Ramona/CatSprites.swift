@@ -158,6 +158,13 @@ enum CatSprites {
     static let runRight = CatClip(textures: frames(row: 10, cols: 0..<5), timePerFrame: 0.08, loops: true, groundAnchors: runGroundAnchors)
     /// Faces left; native art (row 11), not a mirror of runRight.
     static let runLeft = CatClip(textures: frames(row: 11, cols: 0..<5), timePerFrame: 0.08, loops: true, groundAnchors: runGroundAnchors)
+    /// Held mid-air during playJumpToCurrentSurface - the same col-1 mid-leap
+    /// frame runRight/runLeft already single out for a ground-anchor
+    /// correction, but as a static pose instead of cycling the run clip's
+    /// legs while she's airborne (which reads as sprinting in place rather
+    /// than leaping).
+    static let leapRight = CatClip(textures: [frame(row: 10, col: 1)], timePerFrame: 1, loops: false, groundAnchors: [0.3438])
+    static let leapLeft = CatClip(textures: [frame(row: 11, col: 1)], timePerFrame: 1, loops: false, groundAnchors: [0.3438])
     /// Front-facing paw-to-ear scratch (row 17) - this is what row 17 actually
     /// is, per the source pack's labeled reference sheet (cat_pack/black cat
     /// with text.png: row 17 = "Scratch (sit, left)"). Originally mistaken for

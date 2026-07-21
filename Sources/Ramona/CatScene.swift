@@ -440,7 +440,9 @@ final class CatScene: SKScene {
         let reachX = startX + (lastFacingRight ? jumpLeapDistance : -jumpLeapDistance)
         let clampedX = min(max(reachX, groundMinX), groundMaxX)
 
-        playClip(lastFacingRight ? CatSprites.runRight : CatSprites.runLeft)
+        // A held static pose, not the looping run clip - cycling its legs
+        // while airborne read as sprinting in place rather than leaping.
+        playClip(lastFacingRight ? CatSprites.leapRight : CatSprites.leapLeft)
 
         let duration = max(0.25, min(1.5, TimeInterval(hypot(clampedX - startX, groundY - startY) / jumpSpeed)))
         let horizontal = SKAction.moveTo(x: clampedX, duration: duration)
