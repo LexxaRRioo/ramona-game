@@ -23,6 +23,7 @@ Ideas checklist - add as they come up, check off once shipped (note the version)
 - [x] Dedicated drag/held sprite - rows 60/61 ("Hiss (front, left/right)") plays on pickup instead of freezing on whatever frame she was on - pending release.
 - [x] Directional sit/stand statics - row 0 cols 2/3 ("Sit left/right") now play when she stops right after walking/climbing/seeking, instead of always the front-facing sitDown/sitIdle pair. Rows 1 (stand) and the rear/other row-0 columns are still unused.
 - [ ] Side-profile run cycles (rows 29-42, 11 frames each, unused) - redundant with the row 10/11 run now wired to .seekAttention, or could be a distinct faster/slower gait.
+- [ ] Recolor pass: check across sprites/rows that the white bib is actually visible (may be getting lost/miscolored on some poses). Also a specific recoloring bug - the back right leg is coming out half-white instead of fully matching Ramona's one-white-leg marking - needs a fix in the recolor pipeline, not just a one-off frame touch-up.
 
 ## Bugs (known, not yet fixed)
 
