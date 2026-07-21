@@ -183,6 +183,18 @@ enum CatSprites {
     /// `.walk, .climb:` case - "a distinct climbing animation is a later
     /// art thing").
     static let climb = CatClip(textures: frames(row: 62, cols: 0..<3), timePerFrame: 0.15, loops: true, loopPause: 0.3)
+    /// Paw-swipe/batting family (BACKLOG's "future playing with an object"
+    /// entry, rows 29-30/32-37/39-42) - verified against the labeled
+    /// reference sheet the same way groom/scratch/climb were: row labels'
+    /// left/right don't reliably match actual on-screen facing (see the
+    /// walk row 4/5 mislabeling found earlier), so these three were picked
+    /// by eye. Front-facing (row 29, "Right paw swipe stand front") for a
+    /// toy directly in front of her; side-view facing left (row 32) / right
+    /// (row 34) for a toy off to that side - a standing swipe/bat motion,
+    /// not the row 10/11 run cycle.
+    static let pawSwipeFront = CatClip(textures: frames(row: 29, cols: 0..<11), timePerFrame: 0.09, loops: true)
+    static let pawSwipeLeft = CatClip(textures: frames(row: 32, cols: 0..<11), timePerFrame: 0.09, loops: true)
+    static let pawSwipeRight = CatClip(textures: frames(row: 34, cols: 0..<11), timePerFrame: 0.09, loops: true)
     /// Startled hiss crouch (rows 60/61, "Hiss (front, left/right)", first
     /// frame only) - held while she's being dragged, instead of freezing on
     /// whatever frame she happened to be on when picked up.
