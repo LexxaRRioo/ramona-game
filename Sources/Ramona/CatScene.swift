@@ -55,15 +55,14 @@ final class CatScene: SKScene {
     /// .play: once within this distance of the toy, she stops chasing and
     /// starts swiping at it instead - same spirit as stalkRadius.
     private let playEngageRadius: CGFloat = 90
-    /// How often (while chasing) she re-aims at the toy's current position -
-    /// short enough to track a rolling toy, long enough not to spam actions
-    /// every frame (see updatePlayBehavior).
-    private let playChaseStepInterval: TimeInterval = 0.35
-    /// Minimum time between swipes once engaged, so the toy gets visible
-    /// time to roll/settle between hits instead of being nudged every frame.
-    private let swipeCooldown: TimeInterval = 1.2
-    private var lastPlayStepTime: TimeInterval = 0
-    private var lastSwipeTime: TimeInterval = 0
+    /// How long she "watches" the toy before reacting again (a chase step,
+    /// or a swipe) - randomized each time. Live playtesting found a fixed
+    /// short interval (0.35s) reacted to the swipe's OWN nudge almost
+    /// instantly: swipe -> toy shifts a little -> she immediately re-chases
+    /// -> repeat, reading as a jittery loop of half-finished animations
+    /// rather than a deliberate "she noticed, then reacted" rhythm.
+    private let playReactionDelay: ClosedRange<TimeInterval> = 0.8...1.4
+    private var nextPlayReactionTime: TimeInterval = 0
 
     /// Cache of the live-tracked frontmost window's frame (Phase 2), kept
     /// up to date regardless of whether she's currently on it - it's what
@@ -161,13 +160,12 @@ final class CatScene: SKScene {
     override func didMove(to view: SKView) {
         backgroundColor = .clear
         scaleMode = .resizeFill
-        // Much stronger than SpriteKit's real-world default (-9.8) - at
-        // that scale a thrown toy would take ~20s to fall a screen's
-        // height, reading as floating rather than falling. Tuned so a
-        // dropped toy reaches roughly the cat's own dropSpeed (220pt/s)
-        // within a fraction of a second instead - a snappy, light-plastic
-        // fall, not real-world physics. Retune after live playtesting.
-        physicsWorld.gravity = CGVector(dx: 0, dy: -900)
+        // Much stronger than SpriteKit's real-world default (-9.8), which
+        // would take ~20s to fall a screen's height and read as floating
+        // rather than falling - but live playtesting found the first pass
+        // (-900) fell like a dropped brick, not a light plastic tie. Cut to
+        // a quarter of that per feedback ("at least 4x lighter").
+        physicsWorld.gravity = CGVector(dx: 0, dy: -225)
 
         // cat is a positional carrier only, kept invisible (no texture) -
         // its size/anchor just keep hitTest's bounding box consistent.
@@ -611,26 +609,24 @@ final class CatScene: SKScene {
     /// Drives .play per-frame instead of a fixed one-shot move, since the
     /// toy's position can keep changing (rolling under physics, or the user
     /// dragging it) - "aware of where the object is relative to her
-    /// position" rather than committing to a single stale target. Chases
-    /// while outside playEngageRadius (re-aiming every playChaseStepInterval,
-    /// not every frame, so it doesn't spam actions); once close enough,
-    /// stops and swipes on a cooldown instead of a real collision check.
+    /// position" rather than committing to a single stale target. Only acts
+    /// once per playReactionDelay (randomized, not every frame or a short
+    /// fixed interval - see that constant's doc comment for why): chases
+    /// while outside playEngageRadius, or stops and swipes once close enough
+    /// instead of a real collision check.
     private func updatePlayBehavior(_ currentTime: TimeInterval) {
-        guard let toy else { return }
+        guard let toy, currentTime >= nextPlayReactionTime else { return }
         let (groundY, groundMinX, groundMaxX) = groundBounds()
         let targetX = min(max(toy.node.position.x, groundMinX), groundMaxX)
         let distance = hypot(targetX - cat.position.x, toy.node.position.y - cat.position.y)
+        nextPlayReactionTime = currentTime + Double.random(in: playReactionDelay)
 
         if distance <= playEngageRadius {
             cat.removeAction(forKey: "playChase")
-            guard currentTime - lastSwipeTime >= swipeCooldown else { return }
-            lastSwipeTime = currentTime
             performSwipe(toward: toy)
             return
         }
 
-        guard currentTime - lastPlayStepTime >= playChaseStepInterval else { return }
-        lastPlayStepTime = currentTime
         lastFacingRight = targetX >= cat.position.x
         playClip(lastFacingRight ? CatSprites.walkRight : CatSprites.walkLeft)
         let hopDuration = max(0.15, TimeInterval(abs(targetX - cat.position.x) / walkSpeed))

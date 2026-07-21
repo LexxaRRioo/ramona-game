@@ -45,7 +45,9 @@ final class ToyNode {
 
         let body = SKPhysicsBody(rectangleOf: node.size)
         body.affectedByGravity = false // starts resting - see isResting
-        body.linearDamping = 4 // a limp plastic tie, not a bouncy ball
+        // Live playtesting found the first pass (4, plus -900 gravity) felt
+        // heavy overall, not just a strong fall - eased alongside gravity.
+        body.linearDamping = 2
         body.restitution = 0.15
         body.allowsRotation = false // keep it upright; no rotated art frames
         node.physicsBody = body
