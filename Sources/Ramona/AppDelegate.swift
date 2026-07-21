@@ -57,27 +57,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         overlayWindowController?.catScene.playEatPulse()
     }
 
-    /// Menu bar "Offer Toy" (RamonaApp) - picks randomly among her
-    /// preferred toys (SpeciesDefinition.itemPreferences) rather than any
-    /// toy that happens to exist, so a future non-favorite item added to
-    /// Items/ doesn't show up here uninvited.
+    /// Menu bar "Offer Toy" (RamonaApp) - always brings the cable tie for
+    /// now, since it's the only toy with real physical art/behavior; wire/
+    /// beaver only have the old instant-restore path and would otherwise
+    /// dilute this down to a 1-in-3 chance of actually appearing. Revisit
+    /// once those get their own art (see SpeciesDefinition.itemPreferences,
+    /// currently unused here for exactly that reason).
     func offerToy() {
-        guard let species else { return }
-        let preferredToys = species.itemPreferences.compactMap { id in
-            items.first(where: { $0.id == id && $0.kind == .toy })
-        }
-        guard let item = preferredToys.randomElement() else { return }
-        // cable_tie is the first toy with real art/physics - it spawns a
-        // physical object and lets CatAction.play actually score, instead
-        // of the instant-restore-and-pulse path the other toys (no art yet)
-        // still use.
-        if item.id == "cable_tie" {
-            overlayWindowController?.catScene.spawnToy(item)
-            behaviorEngine?.setToyAvailable(true)
-        } else {
-            behaviorEngine?.use(item)
-            overlayWindowController?.catScene.playToyPulse()
-        }
+        guard let item = items.first(where: { $0.id == "cable_tie" }) else { return }
+        overlayWindowController?.catScene.spawnToy(item)
+        behaviorEngine?.setToyAvailable(true)
     }
 
     /// Debug menu "Spawn Cable Tie (QA)" - calls CatScene.spawnToy directly
