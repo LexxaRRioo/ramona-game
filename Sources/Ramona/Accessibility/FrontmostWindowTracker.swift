@@ -11,7 +11,14 @@ import CoreGraphics
 /// Only the primary display is handled; windows on secondary displays will
 /// report an out-of-bounds frame, which callers should treat as untrackable.
 final class FrontmostWindowTracker {
-    var onFrameChange: ((CGRect?) -> Void)?
+    /// The Bool is `isSameWindow`: true when this report is a continuation
+    /// (move/resize) of the same window as the previous report, false when
+    /// tracking just switched to a different window entirely (app/focus
+    /// change) or lost its window (closed, no window, nil frame). Callers
+    /// that only re-anchor to a window they're actively standing on (see
+    /// FloorTracking.nextSurface) need this to avoid treating "a different
+    /// window just became frontmost" as "my window moved".
+    var onFrameChange: ((CGRect?, _ isSameWindow: Bool) -> Void)?
 
     private var appObserver: AXObserver?
     private var currentAppElement: AXUIElement?
@@ -26,6 +33,12 @@ final class FrontmostWindowTracker {
     /// dedup keeps that from also spamming onFrameChange (and restarting her
     /// walk animation) every tick when nothing actually moved.
     private var lastReportedFrame: CGRect?
+    /// The window element behind the last dispatched onFrameChange, used to
+    /// compute isSameWindow - AXUIElement equality (CFEqual) compares the
+    /// underlying accessibility object, not reference identity, so this
+    /// correctly recognizes "still the same window" even though AX hands
+    /// back a fresh AXUIElement value on every query.
+    private var lastReportedWindowElement: AXUIElement?
 
     init() {
         workspaceObserver = NSWorkspace.shared.notificationCenter.addObserver(
@@ -111,7 +124,16 @@ final class FrontmostWindowTracker {
         let frame = currentWindowElement.flatMap { Self.cocoaFrame(of: $0) }
         guard frame != lastReportedFrame else { return }
         lastReportedFrame = frame
-        onFrameChange?(frame)
+
+        let isSameWindow: Bool
+        if let last = lastReportedWindowElement, let current = currentWindowElement {
+            isSameWindow = CFEqual(last, current)
+        } else {
+            isSameWindow = false
+        }
+        lastReportedWindowElement = currentWindowElement
+
+        onFrameChange?(frame, isSameWindow)
     }
 
     private func stopObservingCurrentWindow() {
@@ -151,12 +173,7 @@ final class FrontmostWindowTracker {
             return nil
         }
 
-        return CGRect(
-            x: axPosition.x,
-            y: primaryScreenHeight - axPosition.y - axSize.height,
-            width: axSize.width,
-            height: axSize.height
-        )
+        return AXGeometry.cocoaFrame(position: axPosition, size: axSize, screenHeight: primaryScreenHeight)
     }
 
     /// One-off spatial lookup (unlike the live frontmost-window tracking
@@ -195,7 +212,7 @@ final class FrontmostWindowTracker {
 
             // kCGWindowBounds is top-left-origin, like kAXPositionAttribute
             // in cocoaFrame(of:) - flip to Cocoa's bottom-left origin.
-            let cocoaFrame = CGRect(x: x, y: primaryScreenHeight - y - height, width: width, height: height)
+            let cocoaFrame = AXGeometry.cocoaFrame(position: CGPoint(x: x, y: y), size: CGSize(width: width, height: height), screenHeight: primaryScreenHeight)
             guard cocoaFrame.minX <= point.x, point.x <= cocoaFrame.maxX, cocoaFrame.maxY <= point.y else { continue }
             if best == nil || cocoaFrame.maxY > best!.maxY {
                 best = cocoaFrame

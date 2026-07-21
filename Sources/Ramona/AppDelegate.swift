@@ -219,8 +219,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private func startWindowTracking() {
         let tracker = FrontmostWindowTracker()
-        tracker.onFrameChange = { [weak self] frame in
-            self?.overlayWindowController?.catScene.setTargetWindow(frame)
+        tracker.onFrameChange = { [weak self] frame, isSameWindow in
+            self?.overlayWindowController?.catScene.setTargetWindow(frame, isSameWindow: isSameWindow)
             self?.behaviorEngine?.setWindowAvailable(frame != nil)
         }
         windowTracker = tracker

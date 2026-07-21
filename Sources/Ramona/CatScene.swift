@@ -5,14 +5,10 @@ import SpriteKit
 /// Movement follows whatever action BehaviorEngine picks (Phase 3). She
 /// lives on the screen floor by default; standing on a window's top edge
 /// only happens via the trait-gated CatAction.climb, a manual drag-and-drop
-/// landing there, or while already up there and that window itself moves -
-/// see currentSurface.
+/// landing there, or - while already up there - the live-tracked frontmost
+/// window updating, whether that's the same window moving or a different
+/// one taking focus (she jumps over to it) - see setTargetWindow/Surface.
 final class CatScene: SKScene {
-    private enum Surface {
-        case floor
-        case window(CGRect)
-    }
-
     private let cat = SKSpriteNode()
     /// The actual rendered sprite, a child of `cat`. `cat.position` is owned
     /// exclusively by settle/walkLoop/land; `catVisual.position` (local, so
@@ -26,6 +22,26 @@ final class CatScene: SKScene {
     private let minPerchWidth: CGFloat = 80
     private let walkSpeed: CGFloat = 60 // points per second
     private let dropSpeed: CGFloat = 220 // points per second, used to scale settle/fall durations
+    /// 2x the 64px source cell - the sprite's on-screen width, and the unit
+    /// playJumpToCurrentSurface's leap distance is expressed in.
+    private let catBodyWidth: CGFloat = 128
+    /// How high (points) playJumpToCurrentSurface arcs above the higher of
+    /// her start/end surface - enough to read as an actual hop rather than
+    /// a glide, without turning a same-screen jump into a huge leap.
+    private let jumpHopHeight: CGFloat = 36
+    /// How far (points), in the direction she's facing, playJumpToCurrentSurface
+    /// reaches for when a different window becomes frontmost - a real leap
+    /// covers ground, not just the minimal distance to land in bounds. Still
+    /// clamped to the target window's own width, so a narrow window catches
+    /// her at its edge instead of overshooting off it.
+    private var jumpLeapDistance: CGFloat { catBodyWidth * 3.5 }
+    /// Speed (points/sec) playJumpToCurrentSurface paces its leap at - the
+    /// same pace as .seekAttention's run cycle (4x walkSpeed). A deliberate
+    /// multi-body-length leap needs its own pacing rather than reusing
+    /// settleDuration's cap (tuned for small position corrections, not a
+    /// sustained leap - at that cap a jumpLeapDistance-sized move would
+    /// blur past rather than read as a leap).
+    private var jumpSpeed: CGFloat { walkSpeed * 4 }
     // "Р. грозно смотрит" / paws at a cursor that lingers nearby - cooldown
     // keeps it a rare flourish rather than firing every frame she's close.
     private let stalkRadius: CGFloat = 90
@@ -106,7 +122,7 @@ final class CatScene: SKScene {
         // catVisual at footAnchorY plants her feet on the ground line
         // instead of her center.
         cat.anchorPoint = CGPoint(x: 0.5, y: CatSprites.footAnchorY)
-        cat.size = CGSize(width: 128, height: 128) // 2x the 64px source cell
+        cat.size = CGSize(width: catBodyWidth, height: catBodyWidth)
 
         catVisual.anchorPoint = CGPoint(x: 0.5, y: CatSprites.footAnchorY)
         catVisual.size = cat.size
@@ -158,28 +174,35 @@ final class CatScene: SKScene {
     }
 
     private func isValidPerch(_ frame: CGRect) -> Bool {
-        frame.width >= minPerchWidth && frame.maxY < size.height && CGRect(origin: .zero, size: size).intersects(frame)
+        FloorTracking.isValidPerch(frame, sceneSize: size, minPerchWidth: minPerchWidth)
     }
 
     /// Called whenever the live-tracked frontmost window's frame changes, or
     /// with nil when there's none (closed, minimized, switched to an app
-    /// without a window, or Accessibility not yet granted). Always updates
-    /// the cache; only actually moves her if she's currently standing on
-    /// that window - otherwise it's just kept ready for the next climb.
-    func setTargetWindow(_ frame: CGRect?) {
-        guard let frame, isValidPerch(frame) else {
-            windowFrame = nil
-            if case .window = currentSurface {
-                currentSurface = .floor
-                dropToGround()
-            }
-            return
-        }
+    /// without a window, or Accessibility not yet granted). Any valid frame
+    /// is followed while she's standing on a window - whether it's the same
+    /// window continuing to move, or a different one that just became
+    /// frontmost. `isSameWindow` only picks HOW that follow is animated: a
+    /// different window becoming frontmost plays an explicit walk-style jump
+    /// (playJumpToCurrentSurface) so it reads as an intentional hop instead
+    /// of silently gliding across in whatever static pose she happened to be
+    /// in (jarring mid-sleep/groom) - same-window moves just use the normal
+    /// applyCurrentAction re-settle. The frontmost-window cache itself
+    /// (`windowFrame`, what CatAction.climb targets) always updates
+    /// regardless, since that's "whatever's currently trackable", not
+    /// specifically what she's standing on.
+    func setTargetWindow(_ frame: CGRect?, isSameWindow: Bool) {
+        windowFrame = (frame.map(isValidPerch) == true) ? frame : nil
 
-        windowFrame = frame
-        if case .window = currentSurface {
-            currentSurface = .window(frame)
-            applyCurrentAction()
+        guard let next = FloorTracking.nextSurface(
+            afterWindowUpdate: frame, currentSurface: currentSurface, sceneSize: size, minPerchWidth: minPerchWidth
+        ) else { return }
+
+        let isJump = !isSameWindow && next != currentSurface
+        currentSurface = next
+        switch next {
+        case .floor: dropToGround()
+        case .window: isJump ? playJumpToCurrentSurface() : applyCurrentAction()
         }
     }
 
@@ -358,37 +381,83 @@ final class CatScene: SKScene {
 
     /// The active ground line - the current window's top edge while
     /// currentSurface is .window, the Dock's top edge if there's a bottom Dock,
-    /// the bare screen floor otherwise.
+    /// the bare screen floor otherwise. See FloorTracking.groundBounds for the
+    /// (unit-tested) decision logic.
     private func groundBounds() -> (y: CGFloat, minX: CGFloat, maxX: CGFloat) {
-        if case .window(let frame) = currentSurface, isValidPerch(frame) {
-            return (frame.maxY, frame.minX + sideMargin / 2, frame.maxX - sideMargin / 2)
-        }
-        if let dock = dockSurface {
-            return (dock.maxY, dock.minX + sideMargin / 2, dock.maxX - sideMargin / 2)
-        }
-        return (groundMargin, sideMargin, size.width - sideMargin)
+        FloorTracking.groundBounds(
+            currentSurface: currentSurface, dockSurface: dockSurface, sceneSize: size,
+            groundMargin: groundMargin, sideMargin: sideMargin, minPerchWidth: minPerchWidth
+        )
     }
 
-    private func applyCurrentAction() {
+    /// Resets any in-flight actions/scale, ready for a new settle/jump move -
+    /// shared by applyCurrentAction and playJumpToCurrentSurface, which each
+    /// compute their own target X/duration from the returned ground line
+    /// (a jump reaches further than a plain settle - see jumpLeapDistance).
+    /// Returns nil if the ground line is degenerate (minX >= maxX, e.g. a
+    /// perch too narrow to stand on at all).
+    private func resetForSettle() -> (groundY: CGFloat, groundMinX: CGFloat, groundMaxX: CGFloat)? {
         let (groundY, groundMinX, groundMaxX) = groundBounds()
-        guard groundMinX < groundMaxX else { return }
+        guard groundMinX < groundMaxX else { return nil }
         cat.removeAllActions()
         catVisual.removeAllActions()
         cat.setScale(1)
         catVisual.setScale(1)
         cat.alpha = 1
+        return (groundY, groundMinX, groundMaxX)
+    }
 
+    /// A fixed short duration here made drop-landings and climbs look like
+    /// reversed gravity: covering a whole screen's height in 0.25s reads as
+    /// floating, not falling/hopping. Scaling with distance fixes both
+    /// directions - routine same-surface action switches stay snappy (small
+    /// distance, clamped to the 0.15s floor) while a big climb-up, floor-
+    /// drop, or window jump takes proportionally longer, clamped so it never
+    /// feels sluggish either.
+    private func settleDuration(distance: CGFloat) -> TimeInterval {
+        max(0.15, min(0.6, TimeInterval(distance / dropSpeed)))
+    }
+
+    /// A different window became frontmost while she was standing on one -
+    /// jumps directly over to it with the run/leap cycle (rows 10/11,
+    /// already used for .seekAttention - it has a real airborne mid-leap
+    /// frame, unlike the walk cycle) and a vertical hop arced over the
+    /// horizontal move, instead of the plain straight-line settle
+    /// applyCurrentAction would otherwise give her - a linear move between
+    /// two surfaces at different heights reads as flying/gliding, not
+    /// jumping. Reaches jumpLeapDistance in her facing direction rather than
+    /// the minimal distance to land in bounds, so it reads as a real leap
+    /// covering ground - clamped to the target window's own width, so a
+    /// narrow window still catches her at its edge instead of overshooting
+    /// off it. Resumes into whatever currentAction actually is once she
+    /// lands.
+    private func playJumpToCurrentSurface() {
+        guard let (groundY, groundMinX, groundMaxX) = resetForSettle() else { return }
+        let startX = cat.position.x
+        let startY = cat.position.y
+        let nearestX = min(max(startX, groundMinX), groundMaxX)
+        lastFacingRight = nearestX >= startX
+        let reachX = startX + (lastFacingRight ? jumpLeapDistance : -jumpLeapDistance)
+        let clampedX = min(max(reachX, groundMinX), groundMaxX)
+
+        playClip(lastFacingRight ? CatSprites.runRight : CatSprites.runLeft)
+
+        let duration = max(0.25, min(1.5, TimeInterval(hypot(clampedX - startX, groundY - startY) / jumpSpeed)))
+        let horizontal = SKAction.moveTo(x: clampedX, duration: duration)
+        let up = SKAction.moveTo(y: max(startY, groundY) + jumpHopHeight, duration: duration / 2)
+        up.timingMode = .easeOut
+        let down = SKAction.moveTo(y: groundY, duration: duration / 2)
+        down.timingMode = .easeIn
+        cat.run(.group([horizontal, .sequence([up, down])])) { [weak self] in
+            self?.applyCurrentAction()
+        }
+    }
+
+    private func applyCurrentAction() {
+        guard let (groundY, groundMinX, groundMaxX) = resetForSettle() else { return }
         let clampedX = min(max(cat.position.x, groundMinX), groundMaxX)
-        // A fixed short duration here made drop-landings and climbs look
-        // like reversed gravity: covering a whole screen's height in 0.25s
-        // reads as floating, not falling/hopping. Scaling with distance
-        // fixes both directions - routine same-surface action switches stay
-        // snappy (small distance, clamped to the 0.15s floor) while a big
-        // climb-up or floor-drop takes proportionally longer, clamped so it
-        // never feels sluggish either.
-        let settleDistance = hypot(clampedX - cat.position.x, groundY - cat.position.y)
-        let settleDuration = max(0.15, min(0.6, TimeInterval(settleDistance / dropSpeed)))
-        let settle = SKAction.move(to: CGPoint(x: clampedX, y: groundY), duration: settleDuration)
+        let duration = settleDuration(distance: hypot(clampedX - cat.position.x, groundY - cat.position.y))
+        let settle = SKAction.move(to: CGPoint(x: clampedX, y: groundY), duration: duration)
 
         switch currentAction {
         case .walk, .climb:
