@@ -17,10 +17,15 @@ import Testing
         #expect(score > 0)
     }
 
-    @Test func climbScoresHigherWhenAHigherPerchIsAvailable() {
+    @Test func higherPerchAvailableCurrentlyHasNoEffectOnClimbScore() {
+        // climbPreferenceBoost's application is commented out for now (see
+        // CatAction.score's .climb case) - climbing is meant to be a
+        // one-time hand-off (BehaviorEngine.completeClimb) rather than
+        // biased toward relative height, so this only asserts today's
+        // actual (disabled) behavior rather than the boost itself.
         let withoutBoost = CatAction.climb.score(needs: .full, traits: neutralTraits, sleepWindows: [], hour: 12, windowAvailable: true, higherPerchAvailable: false, toyAvailable: false)
         let withBoost = CatAction.climb.score(needs: .full, traits: neutralTraits, sleepWindows: [], hour: 12, windowAvailable: true, higherPerchAvailable: true, toyAvailable: false)
-        #expect(abs(withBoost - withoutBoost - CatAction.climbPreferenceBoost) < 0.0001)
+        #expect(abs(withBoost - withoutBoost) < 0.0001)
     }
 
     @Test func climbStillScoresZeroWithAHigherPerchButNoTrackableWindow() {

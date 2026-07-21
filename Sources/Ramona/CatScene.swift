@@ -117,6 +117,10 @@ final class CatScene: SKScene {
     /// - BehaviorEngine.setToyBeingDragged mirrors this so the play-fill-rate
     /// bonus only applies while the user is actually engaged with it.
     var onToyDragChanged: ((Bool) -> Void)?
+    /// Fires once climbAscent actually finishes - BehaviorEngine.completeClimb
+    /// mirrors this so climbing hands off to idle instead of staying picked
+    /// indefinitely (see that method's doc comment).
+    var onClimbComplete: (() -> Void)?
 
     /// True between mouseDown/mouseUp or rightMouseDown/rightMouseUp on the
     /// cat - OverlayWindow's hover poll must not fight an in-progress
@@ -869,12 +873,23 @@ final class CatScene: SKScene {
             playClip(lastFacingRight ? CatSprites.walkRight : CatSprites.walkLeft)
             cat.run(.sequence([settle, walkLoop(from: clampedX)]))
         case .climb:
-            // Plays throughout the ascent (climbAscent carries her there
-            // in a series of hops, not settle's straight glide) instead of
-            // pacing afterward - climbing itself is a one-shot reach, not
-            // something to keep doing once she's arrived.
-            playClip(CatSprites.climb)
-            cat.run(climbAscent(to: CGPoint(x: clampedX, y: groundY)))
+            if previousAction == .climb {
+                // Already up there (a re-confirmation, not a fresh entry) -
+                // hold a settled pose instead of replaying the reach-up
+                // ascent animation forever. Shouldn't normally be reachable
+                // any more now that completeClimb() hands off to idle right
+                // after the ascent finishes, but kept as a safety net.
+                playClip(lastFacingRight ? CatSprites.sitRight : CatSprites.sitLeft)
+                cat.run(settle)
+            } else {
+                // Plays throughout the ascent (climbAscent carries her there
+                // in a series of hops, not settle's straight glide) instead
+                // of pacing afterward - climbing itself is a one-shot reach.
+                playClip(CatSprites.climb)
+                cat.run(climbAscent(to: CGPoint(x: clampedX, y: groundY))) { [weak self] in
+                    self?.onClimbComplete?()
+                }
+            }
         case .idle:
             if previousAction == .walk || previousAction == .climb || previousAction == .seekAttention {
                 // She just stopped moving - settle facing the direction she

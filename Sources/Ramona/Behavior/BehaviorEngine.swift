@@ -157,6 +157,24 @@ final class BehaviorEngine {
         evaluateAction()
     }
 
+    /// Called once CatScene's climb-up animation actually finishes ascending
+    /// (whether autonomous or debug-forced). Climbing is meant to be a
+    /// one-time hand-off, not a persistently-scored resting state - unlike
+    /// every other action, nothing decays climb's own score back down over
+    /// time via needs, so left alone it could keep winning indefinitely once
+    /// picked (it was - see BACKLOG's climb-stuck entry). Forces one settle
+    /// to idle, then immediately releases back to autonomous scoring (this
+    /// also clears a debug Force Action pin, so testing climb from the menu
+    /// doesn't get stuck the same way) - a genuinely new climb-worthy
+    /// situation still wins fairly on its own merits from the next natural
+    /// evaluation onward; this only stops the just-finished climb from
+    /// re-winning purely by not having decayed.
+    func completeClimb() {
+        guard currentAction == .climb else { return }
+        setForcedAction(.idle)
+        setForcedAction(nil)
+    }
+
     private func tick(forceNotify: Bool = false) {
         let currentTime = now()
         let isPlaying = currentAction == .play

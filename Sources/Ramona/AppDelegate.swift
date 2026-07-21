@@ -179,6 +179,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         scene?.onToyDragChanged = { [weak engine] dragging in
             engine?.setToyBeingDragged(dragging)
         }
+        scene?.onClimbComplete = { [weak engine] in
+            engine?.completeClimb()
+        }
     }
 
     /// TCC/window-focus notifications don't cover the lock screen; these

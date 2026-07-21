@@ -192,6 +192,46 @@ private final class MutableClock {
         #expect(engine.needs.playDrive < 1)
     }
 
+    @Test func completeClimbSettlesToIdle() {
+        let traits = SpeciesDefinition.TraitWeights(playfulness: 0.5, laziness: 0.5, foodMotivation: 0.5, boldness: 0.5, sociability: 0.5)
+        let saveState = CatSaveState(needs: .full, lastUpdate: base)
+        let engine = BehaviorEngine(species: makeSpecies(traits: traits), saveState: saveState,
+                                    now: { self.base }, randomDouble: { 1 }, persist: { _ in })
+        engine.setForcedAction(.climb)
+        #expect(engine.currentAction == .climb)
+        engine.completeClimb()
+        #expect(engine.currentAction == .idle)
+    }
+
+    @Test func completeClimbIsANoOpWhenNotCurrentlyClimbing() {
+        let traits = SpeciesDefinition.TraitWeights(playfulness: 0.5, laziness: 0.5, foodMotivation: 0.5, boldness: 0.5, sociability: 0.5)
+        let saveState = CatSaveState(needs: .full, lastUpdate: base)
+        let engine = BehaviorEngine(species: makeSpecies(traits: traits), saveState: saveState,
+                                    now: { self.base }, randomDouble: { 1 }, persist: { _ in })
+        engine.setForcedAction(.sleep)
+        var reported: [CatAction] = []
+        engine.onStateChange = { action, _ in reported.append(action) }
+        engine.completeClimb()
+        #expect(engine.currentAction == .sleep)
+        #expect(reported.isEmpty)
+    }
+
+    @Test func completeClimbClearsAForcedActionPinSoAutonomousScoringResumes() {
+        // All-zero traits/needs keep every candidate at 0 or idle's flat
+        // 0.45 - if completeClimb left forcedAction stuck at .climb, a
+        // fresh tick would keep reporting .climb regardless of scoring.
+        let traits = SpeciesDefinition.TraitWeights(playfulness: 0, laziness: 0.5, foodMotivation: 0.5, boldness: 0, sociability: 0)
+        let needs = NeedsState(hunger: 1, energy: 1, play: 0, social: 1)
+        let saveState = CatSaveState(needs: needs, lastUpdate: base)
+        let engine = BehaviorEngine(species: makeSpecies(traits: traits), saveState: saveState,
+                                    now: { self.base }, randomDouble: { 1 }, persist: { _ in })
+        engine.setForcedAction(.climb)
+        engine.completeClimb()
+        #expect(engine.currentAction == .idle)
+        engine.start()
+        #expect(engine.currentAction == .idle)
+    }
+
     @Test func petRestoresSocialNeedAndReevaluatesAction() {
         let traits = SpeciesDefinition.TraitWeights(playfulness: 0.5, laziness: 0.5, foodMotivation: 0.5, boldness: 0.5, sociability: 0.5)
         let needs = NeedsState(hunger: 1, energy: 1, play: 1, social: NeedsState.floor)

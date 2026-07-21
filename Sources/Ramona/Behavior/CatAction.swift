@@ -84,8 +84,16 @@ enum CatAction: Hashable, CaseIterable {
             return (1 - needs.social) * (0.5 + traits.sociability)
         case .climb:
             guard windowAvailable else { return 0 }
-            let base = traits.boldness * 0.6 + traits.playfulness * 0.1
-            return higherPerchAvailable ? base + Self.climbPreferenceBoost : base
+            // higherPerchAvailable's boost is commented out for now - with
+            // only two real surfaces in play (Dock vs. the current window),
+            // climbing is a one-time hand-off the instant a window becomes
+            // available while she's on the Dock, not something worth
+            // comparing relative heights for (BehaviorEngine.completeClimb
+            // is what actually stops this from ever getting stuck, not this
+            // boost - see BACKLOG). Re-enable if/when height comparison
+            // between multiple perches matters again.
+            return traits.boldness * 0.6 + traits.playfulness * 0.1
+            // return higherPerchAvailable ? base + Self.climbPreferenceBoost : base
         case .play:
             guard toyAvailable else { return 0 }
             return (1 - needs.playDrive) * (0.5 + traits.playfulness)
