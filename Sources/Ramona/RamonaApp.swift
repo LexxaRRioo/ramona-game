@@ -8,6 +8,7 @@ struct RamonaApp: App {
     @State private var launchAtLoginEnabled = LaunchAtLogin.isEnabled
     /// nil = autonomous behavior; a value pins that action (debug preview).
     @State private var forcedAction: CatAction? = nil
+    @State private var autoCycleEnabled = false
 
     var body: some Scene {
         MenuBarExtra("Ramona", systemImage: "cat.fill") {
@@ -45,9 +46,15 @@ struct RamonaApp: App {
                     }
                 }
                 .pickerStyle(.inline)
+                .disabled(autoCycleEnabled)
                 .onChange(of: forcedAction) { _, action in
                     appDelegate.forceAction(action)
                 }
+                Toggle("Auto-Cycle Actions (QA)", isOn: $autoCycleEnabled)
+                    .onChange(of: autoCycleEnabled) { _, enabled in
+                        forcedAction = nil
+                        appDelegate.setAutoCycle(enabled)
+                    }
             }
             Divider()
             Button("Quit Ramona") {

@@ -5,6 +5,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var overlayWindowController: OverlayWindowController?
     private var windowTracker: FrontmostWindowTracker?
     private var permissionPollTimer: Timer?
+    private var autoCycleTimer: Timer?
+    private var autoCycleIndex = 0
     private var behaviorEngine: BehaviorEngine?
     private var species: SpeciesDefinition?
     private var items: [ItemDefinition] = []
@@ -17,10 +19,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationDidFinishLaunching(_ notification: Notification) {
         NSApp.setActivationPolicy(.accessory)
 
-        guard let screen = NSScreen.main else { return }
-        let controller = OverlayWindowController(screen: screen)
-        controller.showWindow(nil)
-        overlayWindowController = controller
+        // Dev-only escape hatch: RAMONA_HIDDEN=1 suppresses the overlay
+        // window so rebuilding/relaunching during development doesn't keep
+        // drawing her on screen, without touching the real behavior engine
+        // (needs/mood/persistence all still run as normal).
+        let hidden = ProcessInfo.processInfo.environment["RAMONA_HIDDEN"] == "1"
+        if !hidden, let screen = NSScreen.main {
+            let controller = OverlayWindowController(screen: screen)
+            controller.showWindow(nil)
+            overlayWindowController = controller
+        }
 
         startBehaviorEngine()
         observeScreenLock()
@@ -67,6 +75,33 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// previewing animations, or nil to resume autonomous behavior.
     func forceAction(_ action: CatAction?) {
         behaviorEngine?.setForcedAction(action)
+    }
+
+    /// Debug menu "Auto-Cycle Actions (QA)" - steps through every CatAction
+    /// on a timer, so a visual QA sweep doesn't mean picking each one by
+    /// hand from Force Action. Turning it off hands control back to the
+    /// utility AI, same as picking "Auto (behavior)" in Force Action.
+    func setAutoCycle(_ enabled: Bool) {
+        autoCycleTimer?.invalidate()
+        autoCycleTimer = nil
+        guard enabled else {
+            behaviorEngine?.setForcedAction(nil)
+            return
+        }
+        autoCycleIndex = 0
+        applyAutoCycleStep()
+        autoCycleTimer = Timer.scheduledTimer(withTimeInterval: 5, repeats: true) { [weak self] _ in
+            self?.advanceAutoCycle()
+        }
+    }
+
+    private func advanceAutoCycle() {
+        autoCycleIndex = (autoCycleIndex + 1) % CatAction.allCases.count
+        applyAutoCycleStep()
+    }
+
+    private func applyAutoCycleStep() {
+        behaviorEngine?.setForcedAction(CatAction.allCases[autoCycleIndex])
     }
 
     /// Menu bar "Quiet Mode" - user-toggled hide, e.g. during screen
