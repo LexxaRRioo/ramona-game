@@ -3,6 +3,21 @@
     <channel>
         <title>Ramona</title>
         <item>
+            <title>0.1.2</title>
+            <pubDate>Tue, 21 Jul 2026 11:09:24 +0400</pubDate>
+            <link>https://github.com/LexxaRRioo/ramona-game</link>
+            <sparkle:version>0.1.2</sparkle:version>
+            <sparkle:shortVersionString>0.1.2</sparkle:shortVersionString>
+            <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
+            <sparkle:hardwareRequirements>arm64</sparkle:hardwareRequirements>
+            <sparkle:releaseNotesLink>https://raw.githubusercontent.com/LexxaRRioo/ramona-game/main/release-notes/Ramona-0.1.2.md</sparkle:releaseNotesLink>
+            <enclosure url="https://github.com/LexxaRRioo/ramona-game/releases/download/v0.1.2/Ramona-0.1.2.dmg" length="1494104" type="application/octet-stream" sparkle:edSignature="AgRtAb9tEUtyH5vtp4Ey3krDNOlZWp/xLANVxFPDUlUbvvCGEME/D/Uihoz9+GP1u0xjVv+mGyXoQnutR8Z/BA=="/>
+            <sparkle:deltas>
+                <enclosure url="https://github.com/LexxaRRioo/ramona-game/releases/download/v0.1.2/Ramona0.1.2-0.1.1.delta" sparkle:deltaFrom="0.1.1" length="22178" type="application/octet-stream" sparkle:deltaFromSparkleExecutableSize="977616" sparkle:deltaFromSparkleLocales="de,he,ar,el,ja,fa,uk" sparkle:edSignature="TcXamBViGhkgT9NkoBLy4tccfEjg8KEOtK2DgemUavSed6iuWuaYlmDd4nezdSvh71UCduVuPs6E5VOmTIIyAA=="/>
+                <enclosure url="https://github.com/LexxaRRioo/ramona-game/releases/download/v0.1.2/Ramona0.1.2-0.1.0.delta" sparkle:deltaFrom="0.1.0" length="23626" type="application/octet-stream" sparkle:deltaFromSparkleExecutableSize="977616" sparkle:deltaFromSparkleLocales="de,he,ar,el,ja,fa,uk" sparkle:edSignature="iD+eNiRrWgy9JzveOAeB6RygJ7R4sHg14JIo3WdmxLdy5UlLEHnGrUAmeYGflE2CGjHqqw6c/gbzhOT511c9DA=="/>
+            </sparkle:deltas>
+        </item>
+        <item>
             <title>0.1.1</title>
             <pubDate>Tue, 21 Jul 2026 01:20:31 +0400</pubDate>
             <link>https://github.com/LexxaRRioo/ramona-game</link>
