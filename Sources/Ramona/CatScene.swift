@@ -513,6 +513,44 @@ final class CatScene: SKScene {
         }
     }
 
+    /// Vertical distance a single climb hop covers - big enough that even a
+    /// full-height climb only takes a handful of hops, not a wall of them.
+    private let climbHopRise: CGFloat = 70
+    /// Extra arc height per climb hop, on top of climbHopRise's net rise -
+    /// same idea as jumpHopHeight, just sized for a smaller in-place hop
+    /// rather than a full leap between two surfaces.
+    private let climbHopArc: CGFloat = 16
+
+    /// Climbs to a window in a short series of upward hops instead of one
+    /// smooth diagonal glide - a straight-line move at climbing height read
+    /// as floating/gliding up rather than an active climb. Falls back to a
+    /// single settle when there's little or no actual rise (e.g. climbing
+    /// to a window at roughly her own height).
+    private func climbAscent(to target: CGPoint) -> SKAction {
+        let start = cat.position
+        let totalRise = target.y - start.y
+        guard totalRise > climbHopRise / 2 else {
+            return SKAction.move(to: target, duration: settleDuration(distance: hypot(target.x - start.x, target.y - start.y)))
+        }
+
+        let hopCount = max(1, min(4, Int((totalRise / climbHopRise).rounded(.up))))
+        var hops: [SKAction] = []
+        var previous = start
+        for i in 1...hopCount {
+            let progress = CGFloat(i) / CGFloat(hopCount)
+            let hopTarget = CGPoint(x: start.x + (target.x - start.x) * progress, y: start.y + totalRise * progress)
+            let duration = max(0.2, TimeInterval(hypot(hopTarget.x - previous.x, hopTarget.y - previous.y) / jumpSpeed))
+            let across = SKAction.moveTo(x: hopTarget.x, duration: duration)
+            let up = SKAction.moveTo(y: hopTarget.y + climbHopArc, duration: duration / 2)
+            up.timingMode = .easeOut
+            let down = SKAction.moveTo(y: hopTarget.y, duration: duration / 2)
+            down.timingMode = .easeIn
+            hops.append(.group([across, .sequence([up, down])]))
+            previous = hopTarget
+        }
+        return .sequence(hops)
+    }
+
     private func applyCurrentAction() {
         guard let (groundY, groundMinX, groundMaxX) = resetForSettle() else { return }
         let clampedX = min(max(cat.position.x, groundMinX), groundMaxX)
@@ -525,11 +563,12 @@ final class CatScene: SKScene {
             playClip(lastFacingRight ? CatSprites.walkRight : CatSprites.walkLeft)
             cat.run(.sequence([settle, walkLoop(from: clampedX)]))
         case .climb:
-            // Plays throughout the ascent to the window (settle carries her
-            // there) instead of pacing afterward - climbing itself is a one-
-            // shot reach, not something to keep doing once she's arrived.
+            // Plays throughout the ascent (climbAscent carries her there
+            // in a series of hops, not settle's straight glide) instead of
+            // pacing afterward - climbing itself is a one-shot reach, not
+            // something to keep doing once she's arrived.
             playClip(CatSprites.climb)
-            cat.run(settle)
+            cat.run(climbAscent(to: CGPoint(x: clampedX, y: groundY)))
         case .idle:
             if previousAction == .walk || previousAction == .climb || previousAction == .seekAttention {
                 // She just stopped moving - settle facing the direction she
