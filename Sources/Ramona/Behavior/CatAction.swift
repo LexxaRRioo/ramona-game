@@ -34,6 +34,13 @@ enum CatAction: Hashable, CaseIterable {
         }
     }
 
+    /// Relative-frequency tuning knobs (backlog: "3x less walking, 2x more
+    /// sleeping, 1x more grooming"): scaling walk down and sleep up against
+    /// each other already shifts groom's relative win-rate up too, without
+    /// needing to touch groom's own formula directly.
+    static let walkFrequencyMultiplier: Double = 1.0 / 3.0
+    static let sleepFrequencyMultiplier: Double = 2.0
+
     /// Utility AI: each candidate scores itself from needs/traits/time of
     /// day; BehaviorEngine runs the highest scorer. Nothing here rules an
     /// action out entirely - e.g. sleep outside a nap window still scores
@@ -48,9 +55,9 @@ enum CatAction: Hashable, CaseIterable {
             if sleepWindows.contains(where: { $0.contains(hour: hour) }) {
                 score += 0.4
             }
-            return score
+            return score * Self.sleepFrequencyMultiplier
         case .walk:
-            return (1 - needs.play) * (0.5 + traits.playfulness) + traits.boldness * 0.2
+            return ((1 - needs.play) * (0.5 + traits.playfulness) + traits.boldness * 0.2) * Self.walkFrequencyMultiplier
         case .idle:
             // A steady resting default, so she settles rather than paces
             // whenever nothing else has a strong reason to win.
