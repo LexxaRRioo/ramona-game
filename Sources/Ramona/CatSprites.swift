@@ -177,6 +177,12 @@ enum CatSprites {
     /// meow is a quick vocal beat, not continuous motion, so it reads odd
     /// looping back-to-back with no pause.
     static let meowSit = CatClip(textures: frames(row: 14, cols: 0..<3), timePerFrame: 0.15, loops: true, loopPause: 2.0)
+    /// Two more meow postures (rows 15/16, "Meow lie front"/"Meow stand
+    /// front") - picked alongside meowSit for variety instead of always the
+    /// same one, per BACKLOG's "use rows 14-16" entry. Same loopPause
+    /// reasoning as meowSit - a quick vocal beat, not continuous motion.
+    static let meowLie = CatClip(textures: frames(row: 15, cols: 0..<3), timePerFrame: 0.15, loops: true, loopPause: 2.0)
+    static let meowStand = CatClip(textures: frames(row: 16, cols: 0..<3), timePerFrame: 0.15, loops: true, loopPause: 2.0)
     /// Rear-view climbing reach (row 62, "Jump (back)") - one paw stretching
     /// up along the spine while she ascends to a window, in place of reusing
     /// the walk cycle (see CatScene.applyCurrentAction's old shared

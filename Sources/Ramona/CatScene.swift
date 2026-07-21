@@ -914,8 +914,9 @@ final class CatScene: SKScene {
             ])), withKey: "breath")
         case .seekAttention:
             if Double.random(in: 0..<1) < meowChance {
-                // Rare variant: stays put and meows instead of pacing.
-                playClip(CatSprites.meowSit)
+                // Rare variant: stays put and meows instead of pacing - one
+                // of three postures for variety, rather than always the same.
+                playClip([CatSprites.meowSit, CatSprites.meowLie, CatSprites.meowStand].randomElement()!)
                 cat.run(settle)
             } else {
                 // "Может в два раза быстрее обычного пробегать из одного угла
