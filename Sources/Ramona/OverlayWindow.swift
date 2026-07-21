@@ -92,7 +92,7 @@ final class OverlayWindow: NSPanel {
     /// Polls the cursor (rather than a global NSEvent monitor, to stay
     /// consistent with the rest of the app's Timer-driven design and avoid
     /// extra API surface) and toggles ignoresMouseEvents off only while it's
-    /// within the cat's hit radius, so a click there reaches CatScene's
+    /// within the cat's or the current toy's hit radius, so a click there reaches CatScene's
     /// mouseDown/mouseDragged/mouseUp instead of passing through to
     /// whatever's underneath. Suspended entirely mid-drag (isInteracting),
     /// since the cursor is expected to leave the original hit area then.
@@ -125,6 +125,6 @@ final class OverlayWindow: NSPanel {
         guard !catScene.isInteracting else { return }
         let screenPoint = NSEvent.mouseLocation
         let local = CGPoint(x: screenPoint.x - frame.origin.x, y: screenPoint.y - frame.origin.y)
-        ignoresMouseEvents = !catScene.hitTest(local)
+        ignoresMouseEvents = catScene.hitTest(local) == .none
     }
 }

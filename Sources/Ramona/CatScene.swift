@@ -116,6 +116,20 @@ final class CatScene: SKScene {
     private var isDragging = false
     private var dragMoved = false
     private var dragRejected = false
+    /// Which target (if either) the current left-button gesture started on -
+    /// recorded once at mouseDown rather than re-hit-testing every drag
+    /// event, so the gesture doesn't lose its target once the cursor moves
+    /// off the toy's (or cat's) original bounds. mouseDown can only fire at
+    /// all when OverlayWindow's hover poll already found a hit, so this is
+    /// effectively always .cat or .toy in practice.
+    private var activeMouseTarget: HitTarget = .none
+    /// True while the user is actively dragging the toy (left-button) -
+    /// read by BehaviorEngine for the play-fill-rate bonus.
+    private(set) var isDraggingToy = false
+    /// Recent (point, timestamp) samples while dragging the toy, used to
+    /// derive a release velocity on mouseUp - a few subtractions, no
+    /// physics/gesture library needed.
+    private var toyDragSamples: [(point: CGPoint, time: TimeInterval)] = []
     // Ordinary trackpad/mouse clicks jitter a few points between mouseDown
     // and mouseUp; too low a threshold here misreads nearly every right-click
     // as a drag-pickup (that was the "clicking makes her jump" bug - it
@@ -293,11 +307,21 @@ final class CatScene: SKScene {
         updateDebugText(action: action, mood: mood, needs: needs)
     }
 
-    /// Scene-local hit test (Phase 4). Bounding-box of the sprite's current
-    /// frame, padded a little so the fluffy edges stay grabbable - true
-    /// per-pixel alpha hit-testing is still a later refinement.
-    func hitTest(_ point: CGPoint) -> Bool {
-        cat.frame.insetBy(dx: -4, dy: -4).contains(point)
+    enum HitTarget {
+        case cat
+        case toy
+        case none
+    }
+
+    /// Scene-local hit test (Phase 4, extended for the toy). Bounding boxes
+    /// of the sprites' current frames, padded a little so the fluffy edges
+    /// (and the toy's thin diagonal shape) stay grabbable - true per-pixel
+    /// alpha hit-testing is still a later refinement. Checks the cat first,
+    /// so standing right next to the toy still pets rather than grabs it.
+    func hitTest(_ point: CGPoint) -> HitTarget {
+        if cat.frame.insetBy(dx: -4, dy: -4).contains(point) { return .cat }
+        if let toy, toy.node.frame.insetBy(dx: -6, dy: -6).contains(point) { return .toy }
+        return .none
     }
 
     /// Pins the cat directly to `point` while the user is dragging her,
@@ -405,31 +429,69 @@ final class CatScene: SKScene {
         }
     }
 
-    /// Left button: petting only, never pickup - a plain click-release pets
-    /// once, and holding the button down while moving over her ("cursor-
-    /// petting") pets repeatedly instead of picking her up (see
-    /// rightMouseDown for that).
+    /// Left button: petting on the cat (unchanged), throwing on the toy.
+    /// A plain click-release pets once, and holding the button down while
+    /// moving over her ("cursor-petting") pets repeatedly instead of
+    /// picking her up (see rightMouseDown for that). The toy can't refuse
+    /// to be picked up the way a grumpy cat can, so there's no reject/
+    /// struggle gate for it - grabbing is immediate.
     override func mouseDown(with event: NSEvent) {
         isInteracting = true
         pettedThisGesture = false
+        activeMouseTarget = localCursorPosition().map(hitTest) ?? .none
+        if activeMouseTarget == .toy, let toy {
+            toy.isHeld = true
+            toy.node.physicsBody?.velocity = .zero
+            toyDragSamples = []
+            isDraggingToy = true
+        }
     }
 
     override func mouseDragged(with event: NSEvent) {
-        // Throttled to petPulse's own cadence (0.3s) rather than firing once
-        // per mouse-moved event, which would spam BehaviorEngine.pet()'s
-        // instant social-need restore many times a second.
-        guard event.timestamp - lastPetPulseTime >= petPulseCooldown else { return }
-        lastPetPulseTime = event.timestamp
-        pettedThisGesture = true
-        onPet?()
-        playPetPulse()
+        guard activeMouseTarget == .toy else {
+            // Throttled to petPulse's own cadence (0.3s) rather than firing
+            // once per mouse-moved event, which would spam
+            // BehaviorEngine.pet()'s instant social-need restore many times
+            // a second.
+            guard event.timestamp - lastPetPulseTime >= petPulseCooldown else { return }
+            lastPetPulseTime = event.timestamp
+            pettedThisGesture = true
+            onPet?()
+            playPetPulse()
+            return
+        }
+        guard let toy, let point = localCursorPosition() else { return }
+        toy.node.position = point
+        toyDragSamples.append((point, event.timestamp))
+        if toyDragSamples.count > 4 { toyDragSamples.removeFirst() }
     }
 
     override func mouseUp(with event: NSEvent) {
         isInteracting = false
-        guard !pettedThisGesture else { return }
-        onPet?()
-        playPetPulse()
+        defer { activeMouseTarget = .none }
+        guard activeMouseTarget == .toy else {
+            guard !pettedThisGesture else { return }
+            onPet?()
+            playPetPulse()
+            return
+        }
+        isDraggingToy = false
+        guard let toy else { return }
+        toy.isHeld = false
+        toy.isResting = false
+        toy.node.physicsBody?.affectedByGravity = true
+        toy.node.physicsBody?.velocity = throwVelocity()
+        toyDragSamples = []
+    }
+
+    /// Derives a release velocity from the last couple of recorded drag
+    /// samples - a plain click (or a drag with only one sample) has nothing
+    /// to compute from and just drops the toy in place (zero velocity).
+    private func throwVelocity() -> CGVector {
+        guard let first = toyDragSamples.first, let last = toyDragSamples.last,
+              first.point != last.point, last.time > first.time else { return .zero }
+        let dt = CGFloat(last.time - first.time)
+        return CGVector(dx: (last.point.x - first.point.x) / dt, dy: (last.point.y - first.point.y) / dt)
     }
 
     /// Right button: pickup and carry, what the left button used to do -
