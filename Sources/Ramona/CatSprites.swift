@@ -19,12 +19,17 @@ struct CatClip {
     /// run cycle's single mid-leap frame, whose paws lift briefly above the
     /// baseline while every other frame in that same clip sits right at it.
     let groundAnchors: [CGFloat?]?
+    /// Extra hold, after playing through once, before a looping clip repeats
+    /// - a beat of stillness between cycles instead of an unbroken loop. 0
+    /// (the default) repeats immediately.
+    let loopPause: TimeInterval
 
-    init(textures: [SKTexture], timePerFrame: TimeInterval, loops: Bool, groundAnchors: [CGFloat?]? = nil) {
+    init(textures: [SKTexture], timePerFrame: TimeInterval, loops: Bool, groundAnchors: [CGFloat?]? = nil, loopPause: TimeInterval = 0) {
         self.textures = textures
         self.timePerFrame = timePerFrame
         self.loops = loops
         self.groundAnchors = groundAnchors
+        self.loopPause = loopPause
     }
 
     var isStatic: Bool { textures.count <= 1 }
@@ -105,9 +110,14 @@ enum CatSprites {
     /// groundAnchors carries the same col-9 anchor as lieDown's last frame,
     /// so there's no pop at the hand-off.
     static let sleep = CatClip(textures: frames(row: 6, cols: 9..<10), timePerFrame: 1, loops: false, groundAnchors: [0.375])
-    /// Front-facing self-grooming (row 17, paw to face) - "cleans herself",
-    /// a content resting activity she does between walks.
-    static let groom = CatClip(textures: frames(row: 17, cols: 0..<8), timePerFrame: 0.12, loops: true)
+    /// Front-facing self-grooming (row 12, paw wipes across the face/cheek) -
+    /// "cleans herself", a content resting activity she does between walks.
+    /// Row 17 looks similar at a glance but the paw raises well above her
+    /// head each cycle, reading as a wave/reach rather than a wash - row 12
+    /// keeps the paw at face height throughout, the actual grooming motion.
+    /// loopPause holds her still between wash cycles instead of an unbroken
+    /// loop - felt too frantic/continuous otherwise.
+    static let groom = CatClip(textures: frames(row: 12, cols: 0..<8), timePerFrame: 0.12, loops: true, loopPause: 1.2)
     /// Measured off the sheet (rows 10/11, cols 0-4): frame 1 is a mid-leap
     /// pose whose lowest opaque pixel is row 42, 5px above the walk/sit/other-
     /// run-frames baseline (row 47) - every other frame in the cycle already
@@ -119,4 +129,10 @@ enum CatSprites {
     static let runRight = CatClip(textures: frames(row: 10, cols: 0..<5), timePerFrame: 0.08, loops: true, groundAnchors: runGroundAnchors)
     /// Faces left; native art (row 11), not a mirror of runRight.
     static let runLeft = CatClip(textures: frames(row: 11, cols: 0..<5), timePerFrame: 0.08, loops: true, groundAnchors: runGroundAnchors)
+    /// Front-facing paw-to-ear scratch (row 17) - this is what row 17 actually
+    /// is, per the source pack's labeled reference sheet (cat_pack/black cat
+    /// with text.png: row 17 = "Scratch (sit, left)"). Originally mistaken for
+    /// grooming (the paw raising above her head reads as a wave at a glance)
+    /// and used as `groom` in 0.1.2; reassigned once the real label turned up.
+    static let scratch = CatClip(textures: frames(row: 17, cols: 0..<8), timePerFrame: 0.12, loops: true)
 }

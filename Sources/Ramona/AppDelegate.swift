@@ -118,7 +118,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             scene?.land(on: FrontmostWindowTracker.surfaceBelow(point))
         }
         scene?.onHoldEnded = { [weak engine] in
-            engine?.start()
+            engine?.resumeAfterHold()
         }
     }
 

@@ -46,14 +46,29 @@ final class BehaviorEngine {
     /// launch, or since `pause()`), then starts the recurring timer.
     func start() {
         tick()
-        timer = Timer.scheduledTimer(withTimeInterval: tickInterval, repeats: true) { [weak self] _ in
-            self?.tick()
-        }
+        startTimer()
+    }
+
+    /// Like start(), but guarantees the view resyncs even if the utility AI
+    /// re-picks the same action as before pausing. Use this specifically
+    /// after a hold ends: setHeld() wipes the view's running SKActions for
+    /// the whole drag, so it must always resume - start()'s normal
+    /// same-action throttling (see flourishChance) is meant for the passive
+    /// ambient tick, not for genuinely interrupted state.
+    func resumeAfterHold() {
+        tick(forceNotify: true)
+        startTimer()
     }
 
     func pause() {
         timer?.invalidate()
         timer = nil
+    }
+
+    private func startTimer() {
+        timer = Timer.scheduledTimer(withTimeInterval: tickInterval, repeats: true) { [weak self] _ in
+            self?.tick()
+        }
     }
 
     func saveNow() {
@@ -97,18 +112,18 @@ final class BehaviorEngine {
         evaluateAction()
     }
 
-    private func tick() {
+    private func tick(forceNotify: Bool = false) {
         let now = Date()
         let isActive = currentAction == .walk || currentAction == .seekAttention || currentAction == .climb
         needs.decay(over: now.timeIntervalSince(lastUpdate), traits: species.traits, isSleeping: currentAction == .sleep, isActive: isActive)
         lastUpdate = now
         mood = Mood(needs: needs)
 
-        evaluateAction()
+        evaluateAction(forceNotify: forceNotify)
         saveNow()
     }
 
-    private func evaluateAction() {
+    private func evaluateAction(forceNotify: Bool = false) {
         if let forcedAction {
             currentAction = forcedAction
             onStateChange?(currentAction, mood)
@@ -134,7 +149,7 @@ final class BehaviorEngine {
         // used to fire unconditionally too, replaying the settle animation
         // even mid-sleep - kept now as a rare randomized flourish instead.
         let isRealTransition = currentAction != previousAction
-        if isRealTransition || Double.random(in: 0..<1) < flourishChance {
+        if forceNotify || isRealTransition || Double.random(in: 0..<1) < flourishChance {
             onStateChange?(currentAction, mood)
         }
     }

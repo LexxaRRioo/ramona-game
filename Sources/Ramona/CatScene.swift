@@ -30,6 +30,9 @@ final class CatScene: SKScene {
     // keeps it a rare flourish rather than firing every frame she's close.
     private let stalkRadius: CGFloat = 90
     private let stalkCooldown: TimeInterval = 4
+    /// Odds that entering .groom plays the scratch variant instead of the
+    /// regular wash - a rare alternative, not a fixed routine.
+    private let scratchChance: Double = 0.05
 
     /// Cache of the live-tracked frontmost window's frame (Phase 2), kept
     /// up to date regardless of whether she's currently on it - it's what
@@ -390,7 +393,10 @@ final class CatScene: SKScene {
             cat.run(settle)
         case .groom:
             // Sits and cleans herself - a content between-walks rest activity.
-            playClip(CatSprites.groom)
+            // A rare chance she scratches instead of washing - same idea as
+            // the sleep flourish, an occasional variant rather than a fixed
+            // routine every time.
+            playClip(Double.random(in: 0..<1) < scratchChance ? CatSprites.scratch : CatSprites.groom)
             cat.run(settle)
         case .sleep:
             // Settles, lies down and curls up, then holds the curl. Breathing
@@ -412,7 +418,7 @@ final class CatScene: SKScene {
             // (row 10/11), not just a sped-up walk, so it reads as urgent
             // rather than a walk cycle glitching.
             playClip(clampedX >= cat.position.x ? CatSprites.runRight : CatSprites.runLeft)
-            cat.run(.sequence([settle, walkLoop(from: clampedX, speed: walkSpeed * 2, rightClip: CatSprites.runRight, leftClip: CatSprites.runLeft)]))
+            cat.run(.sequence([settle, walkLoop(from: clampedX, speed: walkSpeed * 4, rightClip: CatSprites.runRight, leftClip: CatSprites.runLeft)]))
         }
     }
 
@@ -432,16 +438,24 @@ final class CatScene: SKScene {
         }
         let intro = animateAction(for: clip)
         guard !clip.loops, let next, let nextFirst = next.textures.first else {
-            catVisual.run(clip.loops ? .repeatForever(intro) : intro, withKey: "anim")
+            catVisual.run(clip.loops ? repeatingLoop(intro, pause: clip.loopPause) : intro, withKey: "anim")
             return
         }
         let loop: SKAction = next.isStatic
             ? .sequence([.setTexture(nextFirst), .run { [weak self] in self?.applyGroundOffset(next, frame: 0) }])
             : {
                 let a = animateAction(for: next)
-                return next.loops ? .repeatForever(a) : a
+                return next.loops ? repeatingLoop(a, pause: next.loopPause) : a
             }()
         catVisual.run(.sequence([intro, loop]), withKey: "anim")
+    }
+
+    /// Wraps a clip's per-cycle animation in repeatForever, holding still for
+    /// `pause` between cycles instead of an unbroken loop when set (see
+    /// CatClip.loopPause).
+    private func repeatingLoop(_ cycle: SKAction, pause: TimeInterval) -> SKAction {
+        guard pause > 0 else { return .repeatForever(cycle) }
+        return .repeatForever(.sequence([cycle, .wait(forDuration: pause)]))
     }
 
     /// Sets catVisual's local position.y for the given clip/frame - zero for
