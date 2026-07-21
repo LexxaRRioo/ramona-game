@@ -3,6 +3,17 @@
     <channel>
         <title>Ramona</title>
         <item>
+            <title>0.5.0</title>
+            <pubDate>Tue, 21 Jul 2026 18:02:15 +0400</pubDate>
+            <sparkle:version>0.5.0</sparkle:version>
+            <sparkle:shortVersionString>0.5.0</sparkle:shortVersionString>
+            <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
+            <sparkle:hardwareRequirements>arm64</sparkle:hardwareRequirements>
+            <link>https://github.com/LexxaRRioo/ramona-game</link>
+            <sparkle:releaseNotesLink>https://raw.githubusercontent.com/LexxaRRioo/ramona-game/main/release-notes/Ramona-0.5.0.md</sparkle:releaseNotesLink>
+            <enclosure url="https://github.com/LexxaRRioo/ramona-game/releases/download/v0.5.0/Ramona-0.5.0.dmg" length="1513800" type="application/octet-stream" sparkle:edSignature="6CAzQPfycaSA7Ke9WKBkgX1PkMzNpbifuqq3G4P4qtUn3Af7n0hIJTzdXnIxK5PXVl/4aOTP4yKGuK8AhJC6DQ=="/>
+        </item>
+        <item>
             <title>0.4.0</title>
             <pubDate>Tue, 21 Jul 2026 17:14:06 +0400</pubDate>
             <sparkle:version>0.4.0</sparkle:version>
