@@ -57,6 +57,20 @@ INTERIOR_SRC = {(80,67,71,255),(114,99,97,255),(154,135,126,255),(211,223,225,25
 # (44-47 loaf, 48-51 curl, 52-55 stretched). Everything else is eye-classified.
 SLEEP_ROWS = set(range(44, 56))
 
+# Grooming/washing (rows 12/13) blinks mid-cycle: the raised paw crosses her
+# face right as she closes her eyes, so detect_eyes finds nothing on those
+# frames even though she's front-facing the whole time (BACKLOG's recolor-pass
+# entry - the bib/leg markings were silently skipped on these frames, a
+# visible flicker every wash loop, because classify() fell through to REAR
+# whenever eyes was empty). Pinned the same way SLEEP_ROWS is, with the eye
+# position borrowed from that row's own open-eye frames as a geometry
+# fallback for mark_front - her head doesn't move within one sit/lie clip,
+# only the washing paw does.
+FRONT_CLOSED_EYE_FALLBACK = {
+    12: [(28, 25), (35, 25)],
+    13: [(21, 28), (28, 28)],
+}
+
 def load_frame(sheet, row, col):
     src = Image.open(sheet).convert("RGBA")
     return src.crop((col*64, row*64, col*64+64, row*64+64)).copy()
@@ -104,6 +118,7 @@ def row_runs(interior, y):
 
 def classify(eyes, interior, row=None):
     if row is not None and row in SLEEP_ROWS: return "SLEEP"
+    if not eyes and row in FRONT_CLOSED_EYE_FALLBACK: return "FRONT"
     x0,y0,x1,y1 = ibox(interior)
     cx = (x0 + x1) / 2.0
     if len(eyes) >= 2: return "FRONT"
@@ -239,9 +254,13 @@ def recolor_auto(cell, row=None):
     px = cell.load()
     eyes = detect_eyes(cell)
     interior = pass1(px)
-    paint_eyes(px, eyes)
+    paint_eyes(px, eyes)  # closed eyes (empty) correctly paint no iris
     fam = classify(eyes, interior, row)
-    if fam == "FRONT":         mark_front(px, eyes, interior)
+    # mark_front only uses eyes for geometry (axis/eye-line) - when they're
+    # genuinely closed, borrow the row's known open-eye position instead of
+    # the real (empty) list, so the bib/leg still anchor correctly.
+    geometry_eyes = eyes if eyes else FRONT_CLOSED_EYE_FALLBACK.get(row, eyes)
+    if fam == "FRONT":         mark_front(px, geometry_eyes, interior)
     elif fam == "SIDE-L":      mark_side(px, eyes[0], interior, "left")
     elif fam == "SIDE-R":      mark_side(px, eyes[0], interior, "right")
     elif fam == "SLEEP":       mark_sleep(px, interior)
