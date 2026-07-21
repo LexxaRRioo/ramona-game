@@ -62,6 +62,12 @@ enum CatAction: Hashable, CaseIterable {
     /// constant 0.45 baseline for any trait combination, not just bold cats.
     static let climbPreferenceBoost: Double = 0.3
 
+    /// Added to .play's score whenever a toy is actually out, on top of the
+    /// playDrive term - "a toy nearby makes her more likely to play" per
+    /// BACKLOG, as a score nudge she still has to win on rather than a
+    /// forced switch (same non-deterministic spirit as climbPreferenceBoost).
+    static let toyPresenceBoost: Double = 0.2
+
     func score(needs: NeedsState, traits: SpeciesDefinition.TraitWeights, sleepWindows: [SleepWindow], hour: Double, windowAvailable: Bool, higherPerchAvailable: Bool, toyAvailable: Bool) -> Double {
         switch self {
         case .sleep:
@@ -96,7 +102,7 @@ enum CatAction: Hashable, CaseIterable {
             // return higherPerchAvailable ? base + Self.climbPreferenceBoost : base
         case .play:
             guard toyAvailable else { return 0 }
-            return (1 - needs.playDrive) * (0.5 + traits.playfulness)
+            return (1 - needs.playDrive) * (0.5 + traits.playfulness) + Self.toyPresenceBoost
         }
     }
 }
