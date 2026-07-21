@@ -520,14 +520,16 @@ final class CatScene: SKScene {
         let settle = SKAction.move(to: CGPoint(x: clampedX, y: groundY), duration: duration)
 
         switch currentAction {
-        case .walk, .climb:
-            // Climbing (Phase 4) reuses the walk visual - only the surface
-            // (floor vs. a window's top edge, chosen in apply(action:...))
-            // differs; a distinct climbing animation is a later art thing.
-            // Face the way she settles; walkLoop then re-picks per leg.
+        case .walk:
             lastFacingRight = clampedX >= cat.position.x
             playClip(lastFacingRight ? CatSprites.walkRight : CatSprites.walkLeft)
             cat.run(.sequence([settle, walkLoop(from: clampedX)]))
+        case .climb:
+            // Plays throughout the ascent to the window (settle carries her
+            // there) instead of pacing afterward - climbing itself is a one-
+            // shot reach, not something to keep doing once she's arrived.
+            playClip(CatSprites.climb)
+            cat.run(settle)
         case .idle:
             if previousAction == .walk || previousAction == .climb || previousAction == .seekAttention {
                 // She just stopped moving - settle facing the direction she

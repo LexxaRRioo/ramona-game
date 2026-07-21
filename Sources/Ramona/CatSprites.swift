@@ -177,6 +177,12 @@ enum CatSprites {
     /// meow is a quick vocal beat, not continuous motion, so it reads odd
     /// looping back-to-back with no pause.
     static let meowSit = CatClip(textures: frames(row: 14, cols: 0..<3), timePerFrame: 0.15, loops: true, loopPause: 2.0)
+    /// Rear-view climbing reach (row 62, "Jump (back)") - one paw stretching
+    /// up along the spine while she ascends to a window, in place of reusing
+    /// the walk cycle (see CatScene.applyCurrentAction's old shared
+    /// `.walk, .climb:` case - "a distinct climbing animation is a later
+    /// art thing").
+    static let climb = CatClip(textures: frames(row: 62, cols: 0..<3), timePerFrame: 0.15, loops: true, loopPause: 0.3)
     /// Startled hiss crouch (rows 60/61, "Hiss (front, left/right)", first
     /// frame only) - held while she's being dragged, instead of freezing on
     /// whatever frame she happened to be on when picked up.
