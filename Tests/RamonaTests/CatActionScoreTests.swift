@@ -8,32 +8,32 @@ import Testing
     private let napWindow = [SleepWindow("01:00-08:00")!]
 
     @Test func climbScoresZeroWithoutAnAvailableWindow() {
-        let score = CatAction.climb.score(needs: .full, traits: neutralTraits, sleepWindows: [], hour: 12, windowAvailable: false, higherPerchAvailable: false)
+        let score = CatAction.climb.score(needs: .full, traits: neutralTraits, sleepWindows: [], hour: 12, windowAvailable: false, higherPerchAvailable: false, toyAvailable: false)
         #expect(score == 0)
     }
 
     @Test func climbScoresAboveZeroWithAWindowAvailable() {
-        let score = CatAction.climb.score(needs: .full, traits: neutralTraits, sleepWindows: [], hour: 12, windowAvailable: true, higherPerchAvailable: false)
+        let score = CatAction.climb.score(needs: .full, traits: neutralTraits, sleepWindows: [], hour: 12, windowAvailable: true, higherPerchAvailable: false, toyAvailable: false)
         #expect(score > 0)
     }
 
     @Test func climbScoresHigherWhenAHigherPerchIsAvailable() {
-        let withoutBoost = CatAction.climb.score(needs: .full, traits: neutralTraits, sleepWindows: [], hour: 12, windowAvailable: true, higherPerchAvailable: false)
-        let withBoost = CatAction.climb.score(needs: .full, traits: neutralTraits, sleepWindows: [], hour: 12, windowAvailable: true, higherPerchAvailable: true)
+        let withoutBoost = CatAction.climb.score(needs: .full, traits: neutralTraits, sleepWindows: [], hour: 12, windowAvailable: true, higherPerchAvailable: false, toyAvailable: false)
+        let withBoost = CatAction.climb.score(needs: .full, traits: neutralTraits, sleepWindows: [], hour: 12, windowAvailable: true, higherPerchAvailable: true, toyAvailable: false)
         #expect(abs(withBoost - withoutBoost - CatAction.climbPreferenceBoost) < 0.0001)
     }
 
     @Test func climbStillScoresZeroWithAHigherPerchButNoTrackableWindow() {
         // higherPerchAvailable shouldn't matter if windowAvailable is false -
         // there's nothing to climb onto in the first place.
-        let score = CatAction.climb.score(needs: .full, traits: neutralTraits, sleepWindows: [], hour: 12, windowAvailable: false, higherPerchAvailable: true)
+        let score = CatAction.climb.score(needs: .full, traits: neutralTraits, sleepWindows: [], hour: 12, windowAvailable: false, higherPerchAvailable: true, toyAvailable: false)
         #expect(score == 0)
     }
 
     @Test func sleepScoresHigherInsideItsNapWindowThanOutside() {
         let needs = NeedsState(hunger: 1, energy: 0.5, play: 1, social: 1)
-        let inWindow = CatAction.sleep.score(needs: needs, traits: neutralTraits, sleepWindows: napWindow, hour: 3, windowAvailable: false, higherPerchAvailable: false)
-        let outsideWindow = CatAction.sleep.score(needs: needs, traits: neutralTraits, sleepWindows: napWindow, hour: 15, windowAvailable: false, higherPerchAvailable: false)
+        let inWindow = CatAction.sleep.score(needs: needs, traits: neutralTraits, sleepWindows: napWindow, hour: 3, windowAvailable: false, higherPerchAvailable: false, toyAvailable: false)
+        let outsideWindow = CatAction.sleep.score(needs: needs, traits: neutralTraits, sleepWindows: napWindow, hour: 15, windowAvailable: false, higherPerchAvailable: false, toyAvailable: false)
         #expect(inWindow > outsideWindow)
     }
 
@@ -41,28 +41,42 @@ import Testing
         // "she can nap on demand if energy runs low enough, not just at
         // scheduled hours" - see CatAction.score's doc comment.
         let exhausted = NeedsState(hunger: 1, energy: NeedsState.floor, play: 1, social: 1)
-        let score = CatAction.sleep.score(needs: exhausted, traits: neutralTraits, sleepWindows: napWindow, hour: 15, windowAvailable: false, higherPerchAvailable: false)
+        let score = CatAction.sleep.score(needs: exhausted, traits: neutralTraits, sleepWindows: napWindow, hour: 15, windowAvailable: false, higherPerchAvailable: false, toyAvailable: false)
         #expect(score > 0)
     }
 
     @Test func walkScoreRisesAsPlayNeedDrops() {
         let satisfied = NeedsState(hunger: 1, energy: 1, play: 1, social: 1)
         let neglected = NeedsState(hunger: 1, energy: 1, play: NeedsState.floor, social: 1)
-        let satisfiedScore = CatAction.walk.score(needs: satisfied, traits: neutralTraits, sleepWindows: [], hour: 12, windowAvailable: false, higherPerchAvailable: false)
-        let neglectedScore = CatAction.walk.score(needs: neglected, traits: neutralTraits, sleepWindows: [], hour: 12, windowAvailable: false, higherPerchAvailable: false)
+        let satisfiedScore = CatAction.walk.score(needs: satisfied, traits: neutralTraits, sleepWindows: [], hour: 12, windowAvailable: false, higherPerchAvailable: false, toyAvailable: false)
+        let neglectedScore = CatAction.walk.score(needs: neglected, traits: neutralTraits, sleepWindows: [], hour: 12, windowAvailable: false, higherPerchAvailable: false, toyAvailable: false)
         #expect(neglectedScore > satisfiedScore)
     }
 
     @Test func seekAttentionScoreRisesAsSocialNeedDrops() {
         let satisfied = NeedsState(hunger: 1, energy: 1, play: 1, social: 1)
         let neglected = NeedsState(hunger: 1, energy: 1, play: 1, social: NeedsState.floor)
-        let satisfiedScore = CatAction.seekAttention.score(needs: satisfied, traits: neutralTraits, sleepWindows: [], hour: 12, windowAvailable: false, higherPerchAvailable: false)
-        let neglectedScore = CatAction.seekAttention.score(needs: neglected, traits: neutralTraits, sleepWindows: [], hour: 12, windowAvailable: false, higherPerchAvailable: false)
+        let satisfiedScore = CatAction.seekAttention.score(needs: satisfied, traits: neutralTraits, sleepWindows: [], hour: 12, windowAvailable: false, higherPerchAvailable: false, toyAvailable: false)
+        let neglectedScore = CatAction.seekAttention.score(needs: neglected, traits: neutralTraits, sleepWindows: [], hour: 12, windowAvailable: false, higherPerchAvailable: false, toyAvailable: false)
         #expect(neglectedScore > satisfiedScore)
     }
 
     @Test func idleScoreIsAConstantBaseline() {
-        let score = CatAction.idle.score(needs: .full, traits: neutralTraits, sleepWindows: [], hour: 12, windowAvailable: false, higherPerchAvailable: false)
+        let score = CatAction.idle.score(needs: .full, traits: neutralTraits, sleepWindows: [], hour: 12, windowAvailable: false, higherPerchAvailable: false, toyAvailable: false)
         #expect(abs(score - 0.45) < 0.0001)
+    }
+
+    @Test func playScoresZeroWithoutAToyAvailable() {
+        let neglected = NeedsState(hunger: 1, energy: 1, play: 1, social: 1, playDrive: NeedsState.floor)
+        let score = CatAction.play.score(needs: neglected, traits: neutralTraits, sleepWindows: [], hour: 12, windowAvailable: false, higherPerchAvailable: false, toyAvailable: false)
+        #expect(score == 0)
+    }
+
+    @Test func playScoreRisesAsPlayDriveDrops() {
+        let satisfied = NeedsState(hunger: 1, energy: 1, play: 1, social: 1, playDrive: 1)
+        let neglected = NeedsState(hunger: 1, energy: 1, play: 1, social: 1, playDrive: NeedsState.floor)
+        let satisfiedScore = CatAction.play.score(needs: satisfied, traits: neutralTraits, sleepWindows: [], hour: 12, windowAvailable: false, higherPerchAvailable: false, toyAvailable: true)
+        let neglectedScore = CatAction.play.score(needs: neglected, traits: neutralTraits, sleepWindows: [], hour: 12, windowAvailable: false, higherPerchAvailable: false, toyAvailable: true)
+        #expect(neglectedScore > satisfiedScore)
     }
 }

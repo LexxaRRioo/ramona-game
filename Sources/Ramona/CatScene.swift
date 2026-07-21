@@ -52,6 +52,18 @@ final class CatScene: SKScene {
     /// Odds that entering .seekAttention plays the "sits in a far corner and
     /// meows" variant instead of the usual run/leap across the screen.
     private let meowChance: Double = 0.2
+    /// .play: once within this distance of the toy, she stops chasing and
+    /// starts swiping at it instead - same spirit as stalkRadius.
+    private let playEngageRadius: CGFloat = 90
+    /// How often (while chasing) she re-aims at the toy's current position -
+    /// short enough to track a rolling toy, long enough not to spam actions
+    /// every frame (see updatePlayBehavior).
+    private let playChaseStepInterval: TimeInterval = 0.35
+    /// Minimum time between swipes once engaged, so the toy gets visible
+    /// time to roll/settle between hits instead of being nudged every frame.
+    private let swipeCooldown: TimeInterval = 1.2
+    private var lastPlayStepTime: TimeInterval = 0
+    private var lastSwipeTime: TimeInterval = 0
 
     /// Cache of the live-tracked frontmost window's frame (Phase 2), kept
     /// up to date regardless of whether she's currently on it - it's what
@@ -98,6 +110,10 @@ final class CatScene: SKScene {
     var onDropped: ((CGPoint) -> Void)?
     /// Fires on rightMouseUp after an accepted hold.
     var onHoldEnded: (() -> Void)?
+    /// Fires whenever isDraggingToy changes (left-button toy drag start/end)
+    /// - BehaviorEngine.setToyBeingDragged mirrors this so the play-fill-rate
+    /// bonus only applies while the user is actually engaged with it.
+    var onToyDragChanged: ((Bool) -> Void)?
 
     /// True between mouseDown/mouseUp or rightMouseDown/rightMouseUp on the
     /// cat - OverlayWindow's hover poll must not fight an in-progress
@@ -444,6 +460,7 @@ final class CatScene: SKScene {
             toy.node.physicsBody?.velocity = .zero
             toyDragSamples = []
             isDraggingToy = true
+            onToyDragChanged?(true)
         }
     }
 
@@ -476,6 +493,7 @@ final class CatScene: SKScene {
             return
         }
         isDraggingToy = false
+        onToyDragChanged?(false)
         guard let toy else { return }
         toy.isHeld = false
         toy.isResting = false
@@ -539,12 +557,78 @@ final class CatScene: SKScene {
     }
 
     override func update(_ currentTime: TimeInterval) {
+        if currentAction == .play {
+            updatePlayBehavior(currentTime)
+        }
         guard currentAction == .walk || currentAction == .idle,
               currentTime - lastStalkTime > stalkCooldown,
               let cursor = localCursorPosition(),
               hypot(cursor.x - cat.position.x, cursor.y - cat.position.y) < stalkRadius else { return }
         lastStalkTime = currentTime
         cat.run(.sequence([.scale(to: 1.15, duration: 0.12), .scale(to: 1.0, duration: 0.12)]))
+    }
+
+    /// Drives .play per-frame instead of a fixed one-shot move, since the
+    /// toy's position can keep changing (rolling under physics, or the user
+    /// dragging it) - "aware of where the object is relative to her
+    /// position" rather than committing to a single stale target. Chases
+    /// while outside playEngageRadius (re-aiming every playChaseStepInterval,
+    /// not every frame, so it doesn't spam actions); once close enough,
+    /// stops and swipes on a cooldown instead of a real collision check.
+    private func updatePlayBehavior(_ currentTime: TimeInterval) {
+        guard let toy else { return }
+        let (groundY, groundMinX, groundMaxX) = groundBounds()
+        let targetX = min(max(toy.node.position.x, groundMinX), groundMaxX)
+        let distance = hypot(targetX - cat.position.x, toy.node.position.y - cat.position.y)
+
+        if distance <= playEngageRadius {
+            cat.removeAction(forKey: "playChase")
+            guard currentTime - lastSwipeTime >= swipeCooldown else { return }
+            lastSwipeTime = currentTime
+            performSwipe(toward: toy)
+            return
+        }
+
+        guard currentTime - lastPlayStepTime >= playChaseStepInterval else { return }
+        lastPlayStepTime = currentTime
+        lastFacingRight = targetX >= cat.position.x
+        playClip(lastFacingRight ? CatSprites.walkRight : CatSprites.walkLeft)
+        let hopDuration = max(0.15, TimeInterval(abs(targetX - cat.position.x) / walkSpeed))
+        cat.run(.move(to: CGPoint(x: targetX, y: groundY), duration: hopDuration), withKey: "playChase")
+    }
+
+    /// Picks a paw-swipe clip from the toy's position relative to her (left/
+    /// right/front), then - partway through the clip, not at frame 0, so it
+    /// lands mid-motion - nudges the toy's physics velocity away from her.
+    /// This is the "much easier than collision simulation" version: a timed,
+    /// scripted impulse, not a real overlap/penetration test.
+    private func performSwipe(toward toy: ToyNode) {
+        let dx = toy.node.position.x - cat.position.x
+        let clip: CatClip
+        if abs(dx) < 20 {
+            clip = CatSprites.pawSwipeFront
+        } else if dx < 0 {
+            lastFacingRight = false
+            clip = CatSprites.pawSwipeLeft
+        } else {
+            lastFacingRight = true
+            clip = CatSprites.pawSwipeRight
+        }
+        playClip(clip)
+
+        let nudgeDelay = clip.timePerFrame * Double(clip.textures.count) / 2
+        cat.run(.sequence([.wait(forDuration: nudgeDelay), .run { [weak self, weak toy] in
+            guard let toy else { return }
+            self?.nudgeToy(toy, awayFrom: dx)
+        }]))
+    }
+
+    private func nudgeToy(_ toy: ToyNode, awayFrom dx: CGFloat) {
+        guard !toy.isHeld else { return }
+        let direction: CGFloat = dx == 0 ? (Bool.random() ? 1 : -1) : (dx < 0 ? -1 : 1)
+        toy.isResting = false
+        toy.node.physicsBody?.affectedByGravity = true
+        toy.node.physicsBody?.velocity = CGVector(dx: direction * 220, dy: 140)
     }
 
     /// NSEvent.mouseLocation is in screen coordinates; the window fills the
@@ -774,6 +858,13 @@ final class CatScene: SKScene {
                 playClip(lastFacingRight ? CatSprites.runRight : CatSprites.runLeft)
                 cat.run(.sequence([settle, walkLoop(from: clampedX, speed: walkSpeed * 4, rightClip: CatSprites.runRight, leftClip: CatSprites.runLeft)]))
             }
+        case .play:
+            // Just settles on arrival - the actual chase/engage/swipe
+            // behavior is driven per-frame from update(_:), since it has to
+            // keep tracking a live (possibly rolling) toy position rather
+            // than move to one fixed point (see updatePlayBehavior).
+            playClip(CatSprites.pawSwipeFront)
+            cat.run(settle)
         }
     }
 

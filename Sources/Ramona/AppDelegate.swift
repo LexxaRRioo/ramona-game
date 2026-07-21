@@ -67,13 +67,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             items.first(where: { $0.id == id && $0.kind == .toy })
         }
         guard let item = preferredToys.randomElement() else { return }
-        // cable_tie is the first toy with real art/physics (Phase B) - it
-        // spawns a physical object instead of the instant-restore-and-pulse
-        // path the other toys (no art yet) still use. Behavior wiring
-        // (scoring/fill-rate/despawn) is a later phase - for now she just
-        // ignores it.
+        // cable_tie is the first toy with real art/physics - it spawns a
+        // physical object and lets CatAction.play actually score, instead
+        // of the instant-restore-and-pulse path the other toys (no art yet)
+        // still use.
         if item.id == "cable_tie" {
             overlayWindowController?.catScene.spawnToy(item)
+            behaviorEngine?.setToyAvailable(true)
         } else {
             behaviorEngine?.use(item)
             overlayWindowController?.catScene.playToyPulse()
@@ -140,6 +140,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             guard let engine else { return }
             self?.overlayWindowController?.catScene.apply(action: action, mood: mood, needs: engine.needs)
         }
+        engine.onPlaySessionComplete = { [weak self] in
+            self?.overlayWindowController?.catScene.despawnToy()
+            self?.behaviorEngine?.setToyAvailable(false)
+        }
         engine.start()
         behaviorEngine = engine
 
@@ -163,6 +167,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         scene?.onHoldEnded = { [weak engine] in
             engine?.resumeAfterHold()
+        }
+        scene?.onToyDragChanged = { [weak engine] dragging in
+            engine?.setToyBeingDragged(dragging)
         }
     }
 

@@ -34,9 +34,23 @@ final class BehaviorEngine {
     /// entry). Kept separate from isWindowAvailable, which just gates climb
     /// open/closed on whether anything is trackable at all.
     private var isHigherPerchAvailable = false
+    /// Whether a toy is currently out on screen - gates CatAction.play's
+    /// score, the same way isWindowAvailable gates climb. Kept up to date by
+    /// AppDelegate/CatScene whenever a toy is spawned/despawned.
+    private var isToyAvailable = false
+    /// Whether the user is actively dragging the current toy - boosts
+    /// .play's need-fill rate while she's engaged with it directly, not
+    /// just while it happens to be sitting nearby (see NeedsState.decay's
+    /// isPlaying/isToyBeingDragged params).
+    private var isToyBeingDragged = false
     /// Debug override (menu bar "Force Action"). When set, scoring is bypassed
     /// and this action is pinned every tick; nil restores autonomous behavior.
     private var forcedAction: CatAction?
+    /// Fires when a `.play` session fills the play need all the way - the
+    /// toy should despawn and her "wants to play" drive resets, ready to
+    /// build back up toward the next session. AppDelegate/CatScene wire this
+    /// to actually remove the toy and clear isToyAvailable.
+    var onPlaySessionComplete: (() -> Void)?
     /// Clock/randomness/persistence seams - real callers use the defaults
     /// (wall-clock time, true randomness, disk persistence); tests inject
     /// deterministic replacements so tick/evaluateAction's decay math,
@@ -127,6 +141,14 @@ final class BehaviorEngine {
         isHigherPerchAvailable = available
     }
 
+    func setToyAvailable(_ available: Bool) {
+        isToyAvailable = available
+    }
+
+    func setToyBeingDragged(_ dragged: Bool) {
+        isToyBeingDragged = dragged
+    }
+
     /// Menu bar "Force Action" debug control. Pass an action to pin it, or nil
     /// to hand control back to the utility AI. Re-evaluates immediately so the
     /// cat reacts without waiting for the next tick.
@@ -137,10 +159,24 @@ final class BehaviorEngine {
 
     private func tick(forceNotify: Bool = false) {
         let currentTime = now()
+        let isPlaying = currentAction == .play
         let isActive = currentAction == .walk || currentAction == .seekAttention || currentAction == .climb
-        needs.decay(over: currentTime.timeIntervalSince(lastUpdate), traits: species.traits, isSleeping: currentAction == .sleep, isActive: isActive)
+        needs.decay(
+            over: currentTime.timeIntervalSince(lastUpdate), traits: species.traits,
+            isSleeping: currentAction == .sleep, isActive: isActive,
+            isPlaying: isPlaying, isToyBeingDragged: isToyBeingDragged
+        )
         lastUpdate = currentTime
         mood = Mood(needs: needs)
+
+        // A play session is "done" once she's had her fill - reset the
+        // twice-a-day drive and let the toy despawn (see
+        // onPlaySessionComplete) so the utility AI naturally moves off
+        // .play next tick (it scores 0 with no toy available).
+        if isPlaying, needs.play >= 1 {
+            needs.playDrive = 1
+            onPlaySessionComplete?()
+        }
 
         evaluateAction(forceNotify: forceNotify)
         saveNow()
@@ -154,9 +190,12 @@ final class BehaviorEngine {
         }
 
         let hour = Double(Calendar.current.component(.hour, from: now()))
-        let candidates: [CatAction] = [.walk, .idle, .sleep, .seekAttention, .climb, .groom]
+        let candidates: [CatAction] = [.walk, .idle, .sleep, .seekAttention, .climb, .groom, .play]
         let scored = candidates.map { action in
-            (action, action.score(needs: needs, traits: species.traits, sleepWindows: species.schedule.sleepWindows, hour: hour, windowAvailable: isWindowAvailable, higherPerchAvailable: isHigherPerchAvailable))
+            (action, action.score(
+                needs: needs, traits: species.traits, sleepWindows: species.schedule.sleepWindows, hour: hour,
+                windowAvailable: isWindowAvailable, higherPerchAvailable: isHigherPerchAvailable, toyAvailable: isToyAvailable
+            ))
         }
 
         let previousAction = currentAction

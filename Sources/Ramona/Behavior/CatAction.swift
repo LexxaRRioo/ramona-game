@@ -21,6 +21,13 @@ enum CatAction: Hashable, CaseIterable {
     /// "Cleans herself" - sits and grooms. A content, between-walks rest
     /// activity, so she isn't pacing whenever she's awake.
     case groom
+    /// Actively playing with a toy (the cable tie, to start) - distinct
+    /// from .walk's incidental play-fill (see NeedsState.decay's isPlaying
+    /// branch), gated on a toy actually being out the same way .climb is
+    /// gated on a window being trackable. Driven by `playDrive`, not `play`
+    /// itself - a separate "wants a dedicated session" urge that resets
+    /// once a session fills the play meter (BehaviorEngine.onPlaySessionComplete).
+    case play
 
     /// Human-readable label for the debug "Force Action" menu.
     var debugName: String {
@@ -31,6 +38,7 @@ enum CatAction: Hashable, CaseIterable {
         case .seekAttention: return "Seek Attention"
         case .climb: return "Climb"
         case .groom: return "Groom"
+        case .play: return "Play"
         }
     }
 
@@ -54,7 +62,7 @@ enum CatAction: Hashable, CaseIterable {
     /// constant 0.45 baseline for any trait combination, not just bold cats.
     static let climbPreferenceBoost: Double = 0.3
 
-    func score(needs: NeedsState, traits: SpeciesDefinition.TraitWeights, sleepWindows: [SleepWindow], hour: Double, windowAvailable: Bool, higherPerchAvailable: Bool) -> Double {
+    func score(needs: NeedsState, traits: SpeciesDefinition.TraitWeights, sleepWindows: [SleepWindow], hour: Double, windowAvailable: Bool, higherPerchAvailable: Bool, toyAvailable: Bool) -> Double {
         switch self {
         case .sleep:
             var score = (1 - needs.energy) * (0.5 + traits.laziness)
@@ -78,6 +86,9 @@ enum CatAction: Hashable, CaseIterable {
             guard windowAvailable else { return 0 }
             let base = traits.boldness * 0.6 + traits.playfulness * 0.1
             return higherPerchAvailable ? base + Self.climbPreferenceBoost : base
+        case .play:
+            guard toyAvailable else { return 0 }
+            return (1 - needs.playDrive) * (0.5 + traits.playfulness)
         }
     }
 }

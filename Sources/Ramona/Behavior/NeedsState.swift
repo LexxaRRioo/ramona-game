@@ -10,7 +10,11 @@ struct NeedsState: Codable {
     /// depend on the owner's attention, hunger has a self-sufficient
     /// baseline she settles at on her own even if never manually fed.
     static let hungerFloor: Double = 0.5
-    static let full = NeedsState(hunger: 1, energy: 1, play: 1, social: 1)
+    /// Multiplies .play's fill rate while the user is actively dragging the
+    /// toy during a play session - engaging with it herself fills faster
+    /// than just having it nearby.
+    static let playInteractionMultiplier: Double = 2.0
+    static let full = NeedsState(hunger: 1, energy: 1, play: 1, social: 1, playDrive: 1)
 
     var hunger: Double
     var energy: Double
@@ -19,8 +23,36 @@ struct NeedsState: Codable {
     /// the others; restored by BehaviorEngine.pet()/use(_:). Drives
     /// CatAction.seekAttention.
     var social: Double
+    /// Separate from `play` itself - specifically "does she want a dedicated
+    /// toy-play session right now", decaying over ~12h so she wants one
+    /// about twice a day. Reset to 1 by BehaviorEngine when a play session
+    /// completes (see onPlaySessionComplete), not here - this only decays.
+    /// Drives CatAction.play; `play` is still what actually fills during the
+    /// session (see isPlaying below).
+    var playDrive: Double
 
-    mutating func decay(over elapsed: TimeInterval, traits: SpeciesDefinition.TraitWeights, isSleeping: Bool, isActive: Bool) {
+    init(hunger: Double, energy: Double, play: Double, social: Double, playDrive: Double = 1) {
+        self.hunger = hunger
+        self.energy = energy
+        self.play = play
+        self.social = social
+        self.playDrive = playDrive
+    }
+
+    /// Custom decode so existing save files (written before playDrive
+    /// existed) upgrade cleanly instead of failing to decode entirely and
+    /// resetting every need back to full - defaults to 1 (satisfied),
+    /// matching a freshly-reset drive rather than an already-neglected one.
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        hunger = try container.decode(Double.self, forKey: .hunger)
+        energy = try container.decode(Double.self, forKey: .energy)
+        play = try container.decode(Double.self, forKey: .play)
+        social = try container.decode(Double.self, forKey: .social)
+        playDrive = try container.decodeIfPresent(Double.self, forKey: .playDrive) ?? 1
+    }
+
+    mutating func decay(over elapsed: TimeInterval, traits: SpeciesDefinition.TraitWeights, isSleeping: Bool, isActive: Bool, isPlaying: Bool, isToyBeingDragged: Bool) {
         let hours = elapsed / 3600
         hunger = Self.apply(floor: Self.hungerFloor, rate: Self.hourlyRate(base: 0.1333, trait: traits.foodMotivation), hours: hours, to: hunger)
         if isSleeping {
@@ -33,7 +65,17 @@ struct NeedsState: Codable {
         } else {
             energy = Self.apply(floor: Self.floor, rate: Self.hourlyRate(base: 0.16, trait: traits.laziness), hours: hours, to: energy)
         }
-        if isActive {
+        if isPlaying {
+            // Actively playing with a toy fills much faster than a generic
+            // activity burst below (~1 minute to half-fill at neutral
+            // trait/no interaction bonus) - a dedicated session, not just
+            // incidental movement. isPlaying/isActive are deliberately
+            // mutually exclusive (see BehaviorEngine.tick), same reasoning
+            // .sleep already gets its own branch instead of folding into
+            // isActive.
+            let multiplier = isToyBeingDragged ? Self.playInteractionMultiplier : 1
+            play = min(1, play + Self.hourlyRate(base: 30, trait: traits.playfulness) * multiplier * hours)
+        } else if isActive {
             // Being active (walking/climbing/seeking) *satisfies* the play
             // drive rather than draining it, so a burst of movement fills play,
             // drops walk's score, and she settles into rest instead of pacing
@@ -44,6 +86,9 @@ struct NeedsState: Codable {
             play = Self.apply(floor: Self.floor, rate: Self.hourlyRate(base: 0.2667, trait: traits.playfulness), hours: hours, to: play)
         }
         social = Self.apply(floor: Self.floor, rate: Self.hourlyRate(base: 0.2, trait: traits.sociability), hours: hours, to: social)
+        // ~12h from full (1) to floor (0.2) at neutral trait - "wants to
+        // play about twice a day".
+        playDrive = Self.apply(floor: Self.floor, rate: Self.hourlyRate(base: 0.0667, trait: traits.playfulness), hours: hours, to: playDrive)
     }
 
     /// Called by BehaviorEngine.pet()/use(_:) (petting, feeding, toys) -

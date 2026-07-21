@@ -101,6 +101,97 @@ private final class MutableClock {
         #expect(reported == .sleep)
     }
 
+    // needs.play=0/energy=1/social=1 suppress groom/sleep/seekAttention the
+    // same way marginTestSetup does for climb; play's own score depends on
+    // playDrive (not needs.play), so needs.play can stay low here freely.
+    private func playMarginTestSetup(clock: MutableClock, playfulness: Double) -> BehaviorEngine {
+        let traits = SpeciesDefinition.TraitWeights(playfulness: playfulness, laziness: 0.5, foodMotivation: 0.5, boldness: 0, sociability: 0)
+        let needs = NeedsState(hunger: 1, energy: 1, play: 0, social: 1, playDrive: 0.2)
+        let saveState = CatSaveState(needs: needs, lastUpdate: clock.current)
+        let engine = BehaviorEngine(species: makeSpecies(traits: traits), saveState: saveState,
+                                    now: clock.now, randomDouble: { 1 }, persist: { _ in })
+        engine.setToyAvailable(true)
+        return engine
+    }
+
+    @Test func playDoesNotWinWithLowPlayfulnessEvenWithATrackableToy() {
+        // play = (1-0.2)*(0.5+0) = 0.4, below idle's 0.45.
+        let engine = playMarginTestSetup(clock: MutableClock(base), playfulness: 0)
+        engine.start()
+        #expect(engine.currentAction == .idle)
+    }
+
+    @Test func playWinsWithHighPlayfulnessAndATrackableToy() {
+        // play = (1-0.2)*(0.5+1) = 1.2, well past idle + margin.
+        let engine = playMarginTestSetup(clock: MutableClock(base), playfulness: 1)
+        engine.start()
+        #expect(engine.currentAction == .play)
+    }
+
+    @Test func playNeverWinsWithoutToyAvailableSetRegardlessOfPlayfulness() {
+        let traits = SpeciesDefinition.TraitWeights(playfulness: 1, laziness: 0.5, foodMotivation: 0.5, boldness: 0, sociability: 0)
+        let needs = NeedsState(hunger: 1, energy: 1, play: 0, social: 1, playDrive: NeedsState.floor)
+        let saveState = CatSaveState(needs: needs, lastUpdate: base)
+        let engine = BehaviorEngine(species: makeSpecies(traits: traits), saveState: saveState,
+                                    now: { self.base }, randomDouble: { 1 }, persist: { _ in })
+        // setToyAvailable is never called here - defaults to false.
+        engine.start()
+        #expect(engine.currentAction != .play)
+    }
+
+    @Test func draggingTheToyFillsPlayFasterThanNotWhileActuallyPlaying() {
+        let clock = MutableClock(base)
+        let traits = SpeciesDefinition.TraitWeights(playfulness: 0.5, laziness: 0.5, foodMotivation: 0.5, boldness: 0.5, sociability: 0.5)
+        let needs = NeedsState(hunger: 1, energy: 1, play: 0.2, social: 1, playDrive: 1)
+
+        let dragged = BehaviorEngine(species: makeSpecies(traits: traits), saveState: CatSaveState(needs: needs, lastUpdate: base),
+                                      now: clock.now, randomDouble: { 1 }, persist: { _ in })
+        dragged.setForcedAction(.play)
+        dragged.setToyBeingDragged(true)
+
+        let notDragged = BehaviorEngine(species: makeSpecies(traits: traits), saveState: CatSaveState(needs: needs, lastUpdate: base),
+                                         now: clock.now, randomDouble: { 1 }, persist: { _ in })
+        notDragged.setForcedAction(.play)
+
+        clock.current = base.addingTimeInterval(60)
+        dragged.start()
+        notDragged.start()
+        #expect(dragged.needs.play > notDragged.needs.play)
+    }
+
+    @Test func playSessionCompleteResetsPlayDriveAndFiresCallback() {
+        let clock = MutableClock(base)
+        let traits = SpeciesDefinition.TraitWeights(playfulness: 0.5, laziness: 0.5, foodMotivation: 0.5, boldness: 0.5, sociability: 0.5)
+        // 0.99 + a tick's worth of isPlaying fill comfortably clears 1.0.
+        let needs = NeedsState(hunger: 1, energy: 1, play: 0.99, social: 1, playDrive: 0.3)
+        let saveState = CatSaveState(needs: needs, lastUpdate: clock.current)
+        let engine = BehaviorEngine(species: makeSpecies(traits: traits), saveState: saveState,
+                                    now: clock.now, randomDouble: { 1 }, persist: { _ in })
+        engine.setForcedAction(.play)
+        var completed = false
+        engine.onPlaySessionComplete = { completed = true }
+        clock.current = base.addingTimeInterval(60)
+        engine.start()
+        #expect(completed)
+        #expect(abs(engine.needs.playDrive - 1) < 0.0001)
+    }
+
+    @Test func playSessionCompleteDoesNotFireBeforeThePlayMeterFills() {
+        let clock = MutableClock(base)
+        let traits = SpeciesDefinition.TraitWeights(playfulness: 0.5, laziness: 0.5, foodMotivation: 0.5, boldness: 0.5, sociability: 0.5)
+        let needs = NeedsState(hunger: 1, energy: 1, play: 0.2, social: 1, playDrive: 0.3)
+        let saveState = CatSaveState(needs: needs, lastUpdate: clock.current)
+        let engine = BehaviorEngine(species: makeSpecies(traits: traits), saveState: saveState,
+                                    now: clock.now, randomDouble: { 1 }, persist: { _ in })
+        engine.setForcedAction(.play)
+        var completed = false
+        engine.onPlaySessionComplete = { completed = true }
+        clock.current = base.addingTimeInterval(60)
+        engine.start()
+        #expect(!completed)
+        #expect(engine.needs.playDrive < 1)
+    }
+
     @Test func petRestoresSocialNeedAndReevaluatesAction() {
         let traits = SpeciesDefinition.TraitWeights(playfulness: 0.5, laziness: 0.5, foodMotivation: 0.5, boldness: 0.5, sociability: 0.5)
         let needs = NeedsState(hunger: 1, energy: 1, play: 1, social: NeedsState.floor)
