@@ -17,6 +17,11 @@ final class BehaviorEngine {
     private let tickInterval: TimeInterval = 20
     // Avoids flickering between two similarly-scored actions every tick.
     private let actionSwitchMargin: Double = 0.1
+    /// Odds per tick that re-confirming the SAME action (no real transition)
+    /// still replays its settle/enter animation - "she stirred, but settled
+    /// back down" rather than a hard never-repeat. A real transition (e.g.
+    /// walk -> sleep) always plays regardless of this - see evaluateAction.
+    private let flourishChance: Double = 0.05
     /// Whether there's currently a window she could climb onto - gates
     /// CatAction.climb's score. Kept up to date by AppDelegate from the
     /// same live tracking CatScene uses (see FrontmostWindowTracker).
@@ -116,6 +121,7 @@ final class BehaviorEngine {
             (action, action.score(needs: needs, traits: species.traits, sleepWindows: species.schedule.sleepWindows, hour: hour, windowAvailable: isWindowAvailable))
         }
 
+        let previousAction = currentAction
         if let best = scored.max(by: { $0.1 < $1.1 }) {
             let currentScore = scored.first(where: { $0.0 == currentAction })?.1 ?? -.infinity
             if best.0 != currentAction, best.1 > currentScore + actionSwitchMargin {
@@ -123,6 +129,13 @@ final class BehaviorEngine {
             }
         }
 
-        onStateChange?(currentAction, mood)
+        // A real transition always fires (she has to actually walk over,
+        // lie down, etc.). Re-confirming the same action every 20s tick
+        // used to fire unconditionally too, replaying the settle animation
+        // even mid-sleep - kept now as a rare randomized flourish instead.
+        let isRealTransition = currentAction != previousAction
+        if isRealTransition || Double.random(in: 0..<1) < flourishChance {
+            onStateChange?(currentAction, mood)
+        }
     }
 }

@@ -14,6 +14,13 @@ final class CatScene: SKScene {
     }
 
     private let cat = SKSpriteNode()
+    /// The actual rendered sprite, a child of `cat`. `cat.position` is owned
+    /// exclusively by settle/walkLoop/land; `catVisual.position` (local, so
+    /// always relative to whatever `cat` is doing) carries only the small
+    /// per-frame ground-contact correction (see applyGroundOffset) - fully
+    /// decoupled from cat's position so the correction can never fight or
+    /// compound with it, no matter how often a clip replays.
+    private let catVisual = SKSpriteNode()
     private let groundMargin: CGFloat = 20
     private let sideMargin: CGFloat = 40
     private let minPerchWidth: CGFloat = 80
@@ -81,12 +88,19 @@ final class CatScene: SKScene {
         backgroundColor = .clear
         scaleMode = .resizeFill
 
-        // The 64px cell has ~16px of empty space below her paws; anchoring at
-        // footAnchorY plants her feet on the ground line instead of her center.
+        // cat is a positional carrier only, kept invisible (no texture) -
+        // its size/anchor just keep hitTest's bounding box consistent.
+        // The 64px cell has ~16px of empty space below her paws; anchoring
+        // catVisual at footAnchorY plants her feet on the ground line
+        // instead of her center.
         cat.anchorPoint = CGPoint(x: 0.5, y: CatSprites.footAnchorY)
         cat.size = CGSize(width: 128, height: 128) // 2x the 64px source cell
 
-        cat.texture = CatSprites.sitIdle.textures.first
+        catVisual.anchorPoint = CGPoint(x: 0.5, y: CatSprites.footAnchorY)
+        catVisual.size = cat.size
+        catVisual.texture = CatSprites.sitIdle.textures.first
+        cat.addChild(catVisual)
+
         cat.position = CGPoint(x: size.width / 2, y: groundMargin)
         addChild(cat)
 
@@ -211,7 +225,9 @@ final class CatScene: SKScene {
     /// bypassing the settle/walk/sleep action machinery entirely.
     func setHeld(at point: CGPoint) {
         cat.removeAllActions()
+        catVisual.removeAllActions()
         cat.setScale(1)
+        catVisual.setScale(1)
         cat.alpha = 1
         cat.position = point
     }
@@ -343,7 +359,9 @@ final class CatScene: SKScene {
         let (groundY, groundMinX, groundMaxX) = groundBounds()
         guard groundMinX < groundMaxX else { return }
         cat.removeAllActions()
+        catVisual.removeAllActions()
         cat.setScale(1)
+        catVisual.setScale(1)
         cat.alpha = 1
 
         let clampedX = min(max(cat.position.x, groundMinX), groundMaxX)
@@ -380,16 +398,21 @@ final class CatScene: SKScene {
             // she never appears to rotate while asleep.
             playClip(CatSprites.lieDown, then: CatSprites.sleep)
             cat.run(settle)
-            cat.run(.repeatForever(.sequence([
+            // Runs on catVisual, not cat: cat.position is the settle/walk
+            // target, and scaling that node too would compound with
+            // catVisual's own per-frame ground offset (see
+            // applyGroundOffset) every breath cycle.
+            catVisual.run(.repeatForever(.sequence([
                 .scaleY(to: 0.96, duration: 1.8),
                 .scaleY(to: 1.0, duration: 1.8)
             ])), withKey: "breath")
         case .seekAttention:
             // "Может в два раза быстрее обычного пробегать из одного угла
-            // квартиры в другой" when long ignored - same pacing as .walk,
-            // just faster and more visibly urgent.
-            playClip(clampedX >= cat.position.x ? CatSprites.walkRight : CatSprites.walkLeft)
-            cat.run(.sequence([settle, walkLoop(from: clampedX, speed: walkSpeed * 2)]))
+            // квартиры в другой" when long ignored - a real run/leap cycle
+            // (row 10/11), not just a sped-up walk, so it reads as urgent
+            // rather than a walk cycle glitching.
+            playClip(clampedX >= cat.position.x ? CatSprites.runRight : CatSprites.runLeft)
+            cat.run(.sequence([settle, walkLoop(from: clampedX, speed: walkSpeed * 2, rightClip: CatSprites.runRight, leftClip: CatSprites.runLeft)]))
         }
     }
 
@@ -399,40 +422,47 @@ final class CatScene: SKScene {
     /// change. Pass `then:` to play a one-shot intro (e.g. sitting down) and
     /// hand off to a looping clip (e.g. the breathing sit) when it finishes.
     private func playClip(_ clip: CatClip, then next: CatClip? = nil) {
-        cat.removeAction(forKey: "anim")
+        catVisual.removeAction(forKey: "anim")
         guard let first = clip.textures.first else { return }
-        applyGroundAnchor(clip, frame: 0)
+        applyGroundOffset(clip, frame: 0)
         guard !clip.isStatic else {
-            cat.texture = first
+            catVisual.texture = first
             if let next { playClip(next) }
             return
         }
         let intro = animateAction(for: clip)
         guard !clip.loops, let next, let nextFirst = next.textures.first else {
-            cat.run(clip.loops ? .repeatForever(intro) : intro, withKey: "anim")
+            catVisual.run(clip.loops ? .repeatForever(intro) : intro, withKey: "anim")
             return
         }
         let loop: SKAction = next.isStatic
-            ? .sequence([.setTexture(nextFirst), .run { [weak self] in self?.applyGroundAnchor(next, frame: 0) }])
+            ? .sequence([.setTexture(nextFirst), .run { [weak self] in self?.applyGroundOffset(next, frame: 0) }])
             : {
                 let a = animateAction(for: next)
                 return next.loops ? .repeatForever(a) : a
             }()
-        cat.run(.sequence([intro, loop]), withKey: "anim")
+        catVisual.run(.sequence([intro, loop]), withKey: "anim")
     }
 
-    /// Sets the node's anchorPoint.y for the given clip/frame - CatSprites.
-    /// footAnchorY for the common case, or that clip's own per-frame override
-    /// (see CatClip.groundAnchors) for poses like lieDown/sleep whose visual
-    /// "ground contact" sits elsewhere in the 64px cell. Independent of
-    /// cat.position, which settle/walk own exclusively, so this never fights
-    /// them for the same property.
-    private func applyGroundAnchor(_ clip: CatClip, frame: Int) {
-        cat.anchorPoint = CGPoint(x: 0.5, y: clip.groundAnchors?[frame] ?? CatSprites.footAnchorY)
+    /// Sets catVisual's local position.y for the given clip/frame - zero for
+    /// the common case, or a small correction derived from that clip's own
+    /// per-frame measurement (see CatClip.groundAnchors) for poses like
+    /// lieDown/sleep whose visual "ground contact" sits elsewhere in the
+    /// 64px cell than the walk/sit baseline. This moves the sprite itself
+    /// (catVisual, a child of cat) rather than reinterpreting anchorPoint,
+    /// and catVisual's anchorPoint never changes - so however often a clip
+    /// replays, this always resolves to the same offset for the same frame,
+    /// with nothing to accumulate.
+    private func applyGroundOffset(_ clip: CatClip, frame: Int) {
+        guard let anchors = clip.groundAnchors, let anchor = anchors[frame] else {
+            catVisual.position.y = 0
+            return
+        }
+        catVisual.position.y = (CatSprites.footAnchorY - anchor) * cat.size.height
     }
 
     /// Like SKAction.animate(with:timePerFrame:resize:restore:), plus a
-    /// synchronized anchorPoint update per frame for clips that need one.
+    /// synchronized ground-offset update per frame for clips that need one.
     private func animateAction(for clip: CatClip) -> SKAction {
         guard clip.groundAnchors != nil else {
             return SKAction.animate(with: clip.textures, timePerFrame: clip.timePerFrame, resize: false, restore: false)
@@ -440,8 +470,8 @@ final class CatScene: SKScene {
         let steps = clip.textures.indices.map { i in
             SKAction.sequence([
                 .run { [weak self] in
-                    self?.cat.texture = clip.textures[i]
-                    self?.applyGroundAnchor(clip, frame: i)
+                    self?.catVisual.texture = clip.textures[i]
+                    self?.applyGroundOffset(clip, frame: i)
                 },
                 .wait(forDuration: clip.timePerFrame)
             ])
@@ -449,11 +479,14 @@ final class CatScene: SKScene {
         return .sequence(steps)
     }
 
-    private func walkLoop(from startX: CGFloat, speed: CGFloat? = nil) -> SKAction {
+    /// rightClip/leftClip default to the walk cycle; .seekAttention passes
+    /// the run cycle instead so the same approach/ping-pong logic drives
+    /// both gaits.
+    private func walkLoop(from startX: CGFloat, speed: CGFloat? = nil, rightClip: CatClip = CatSprites.walkRight, leftClip: CatClip = CatSprites.walkLeft) -> SKAction {
         let speed = speed ?? walkSpeed
         let (_, groundMinX, groundMaxX) = groundBounds()
-        // Each leg swaps to the matching directional walk cycle (native left
-        // and right rows on the sheet, not a mirror) the instant it begins.
+        // Each leg swaps to the matching directional cycle (native left and
+        // right rows on the sheet, not a mirror) the instant it begins.
         func leg(to x: CGFloat, from x0: CGFloat, clip: CatClip) -> SKAction {
             let face = SKAction.run { [weak self] in self?.playClip(clip) }
             let move = SKAction.moveTo(x: x, duration: TimeInterval(abs(x - x0) / speed))
@@ -465,10 +498,10 @@ final class CatScene: SKScene {
         // duration was computed for the wrong distance and she'd cross the
         // whole width in a fraction of the time - the "teleport" on reaching
         // an end. The cycle legs below always measure from the true endpoints.
-        let approach = leg(to: groundMaxX, from: startX, clip: CatSprites.walkRight)
+        let approach = leg(to: groundMaxX, from: startX, clip: rightClip)
         let cycle = SKAction.repeatForever(.sequence([
-            leg(to: groundMinX, from: groundMaxX, clip: CatSprites.walkLeft),
-            leg(to: groundMaxX, from: groundMinX, clip: CatSprites.walkRight)
+            leg(to: groundMinX, from: groundMaxX, clip: leftClip),
+            leg(to: groundMaxX, from: groundMinX, clip: rightClip)
         ]))
         return .sequence([approach, cycle])
     }
@@ -476,7 +509,9 @@ final class CatScene: SKScene {
     private func dropToGround() {
         let (groundY, _, _) = groundBounds()
         cat.removeAllActions()
+        catVisual.removeAllActions()
         cat.setScale(1)
+        catVisual.setScale(1)
         cat.alpha = 1
         let fallDuration = TimeInterval(abs(cat.position.y - groundY) / dropSpeed)
         let fall = SKAction.move(to: CGPoint(x: cat.position.x, y: groundY), duration: max(0.1, fallDuration))
@@ -489,11 +524,11 @@ final class CatScene: SKScene {
         // Ramona is already fully coloured, so mood only nudges a faint gray
         // wash over the sprite rather than repainting her - a real per-mood
         // pose set is future art. colorBlendFactor 0 leaves her untouched.
-        cat.color = .gray
+        catVisual.color = .gray
         switch mood {
-        case .happy: cat.colorBlendFactor = 0
-        case .content: cat.colorBlendFactor = 0.08
-        case .grumpy: cat.colorBlendFactor = 0.2
+        case .happy: catVisual.colorBlendFactor = 0
+        case .content: catVisual.colorBlendFactor = 0.08
+        case .grumpy: catVisual.colorBlendFactor = 0.2
         }
     }
 }

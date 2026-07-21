@@ -8,16 +8,19 @@ struct CatClip {
     let textures: [SKTexture]
     let timePerFrame: TimeInterval
     let loops: Bool
-    /// Per-frame override for the sprite node's anchorPoint.y, parallel to
-    /// `textures`. nil (the common case) uses CatSprites.footAnchorY for
-    /// every frame. Only clips whose pose occupies a different vertical
-    /// slice of the 64px cell than the walk/sit baseline need this - e.g.
+    /// Per-frame measured ground-contact anchor, parallel to `textures`. nil
+    /// (the common case, or a nil element within a non-nil array) uses
+    /// CatSprites.footAnchorY - i.e. no correction - for that frame. Only
+    /// frames whose pose occupies a different vertical slice of the 64px
+    /// cell than the walk/sit baseline need an explicit value - e.g.
     /// lieDown, where she progressively curls up and occupies less cell
     /// height, so anchoring at the walk/sit fraction left a growing gap
-    /// under her ("floating" instead of settling onto the surface).
-    let groundAnchors: [CGFloat]?
+    /// under her ("floating" instead of settling onto the surface); or the
+    /// run cycle's single mid-leap frame, whose paws lift briefly above the
+    /// baseline while every other frame in that same clip sits right at it.
+    let groundAnchors: [CGFloat?]?
 
-    init(textures: [SKTexture], timePerFrame: TimeInterval, loops: Bool, groundAnchors: [CGFloat]? = nil) {
+    init(textures: [SKTexture], timePerFrame: TimeInterval, loops: Bool, groundAnchors: [CGFloat?]? = nil) {
         self.textures = textures
         self.timePerFrame = timePerFrame
         self.loops = loops
@@ -91,7 +94,7 @@ enum CatSprites {
     /// baseline's 47. Converted to anchorPoint.y fractions (1 - bottomRow/64)
     /// - she curls up over the transition and the empty space below her
     /// grows from ~2px to ~7px, so the anchor has to climb to match.
-    static let lieDownGroundAnchors: [CGFloat] = [0.297, 0.297, 0.297, 0.297, 0.3125, 0.3125, 0.3594, 0.3594, 0.375, 0.375]
+    static let lieDownGroundAnchors: [CGFloat?] = [0.297, 0.297, 0.297, 0.297, 0.3125, 0.3125, 0.3594, 0.3594, 0.375, 0.375]
     /// Lie-down-and-curl transition (row 6, cols 0–9: loaf → flatten → curl;
     /// cols 10–13 are a run cycle sharing the row, excluded) - plays once as
     /// she settles down to sleep.
@@ -105,4 +108,15 @@ enum CatSprites {
     /// Front-facing self-grooming (row 17, paw to face) - "cleans herself",
     /// a content resting activity she does between walks.
     static let groom = CatClip(textures: frames(row: 17, cols: 0..<8), timePerFrame: 0.12, loops: true)
+    /// Measured off the sheet (rows 10/11, cols 0-4): frame 1 is a mid-leap
+    /// pose whose lowest opaque pixel is row 42, 5px above the walk/sit/other-
+    /// run-frames baseline (row 47) - every other frame in the cycle already
+    /// sits right at the baseline, so only that one frame needs a correction.
+    static let runGroundAnchors: [CGFloat?] = [nil, 0.3438, nil, nil, nil]
+    /// Full-speed run/leap, facing right (row 10) - what "seeking attention"
+    /// (long-neglected, "может в два раза быстрее обычного пробегать из
+    /// одного угла квартиры в другой") plays instead of a sped-up walk cycle.
+    static let runRight = CatClip(textures: frames(row: 10, cols: 0..<5), timePerFrame: 0.08, loops: true, groundAnchors: runGroundAnchors)
+    /// Faces left; native art (row 11), not a mirror of runRight.
+    static let runLeft = CatClip(textures: frames(row: 11, cols: 0..<5), timePerFrame: 0.08, loops: true, groundAnchors: runGroundAnchors)
 }
