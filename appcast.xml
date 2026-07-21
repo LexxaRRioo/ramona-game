@@ -3,6 +3,22 @@
     <channel>
         <title>Ramona</title>
         <item>
+            <title>0.1.3</title>
+            <pubDate>Tue, 21 Jul 2026 11:59:12 +0400</pubDate>
+            <link>https://github.com/LexxaRRioo/ramona-game</link>
+            <sparkle:version>0.1.3</sparkle:version>
+            <sparkle:shortVersionString>0.1.3</sparkle:shortVersionString>
+            <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
+            <sparkle:hardwareRequirements>arm64</sparkle:hardwareRequirements>
+            <sparkle:releaseNotesLink>https://raw.githubusercontent.com/LexxaRRioo/ramona-game/main/release-notes/Ramona-0.1.3.md</sparkle:releaseNotesLink>
+            <enclosure url="https://github.com/LexxaRRioo/ramona-game/releases/download/v0.1.3/Ramona-0.1.3.dmg" length="1500562" type="application/octet-stream" sparkle:edSignature="E076LdR8ohoxp/fkEIXsYU9Rydm/Lq0QCHxyCEK99IrcBIpGGgn8PADn21xzXWQEbLFrqr02jkfx2wJ8m3jwBQ=="/>
+            <sparkle:deltas>
+                <enclosure url="https://github.com/LexxaRRioo/ramona-game/releases/download/v0.1.3/Ramona0.1.3-0.1.2.delta" sparkle:deltaFrom="0.1.2" length="24190" type="application/octet-stream" sparkle:deltaFromSparkleExecutableSize="977616" sparkle:deltaFromSparkleLocales="de,he,ar,el,ja,fa,uk" sparkle:edSignature="walhlM5SX8IxDM6h0VM1puYLdCO5xrSwhd0X+vg+Dl9d89rKHftodbznjWrnkY990dWpIy14NxGi3jo8UlB4Aw=="/>
+                <enclosure url="https://github.com/LexxaRRioo/ramona-game/releases/download/v0.1.3/Ramona0.1.3-0.1.1.delta" sparkle:deltaFrom="0.1.1" length="28278" type="application/octet-stream" sparkle:deltaFromSparkleExecutableSize="977616" sparkle:deltaFromSparkleLocales="de,he,ar,el,ja,fa,uk" sparkle:edSignature="sST9S9F/hUpXqIKWsVX0cqZQUcnjkyZenZc0R5A3/DoauS6E34k2UtmG8g6I/DWtatIqnxcycH7ZvgCpVwn5AQ=="/>
+                <enclosure url="https://github.com/LexxaRRioo/ramona-game/releases/download/v0.1.3/Ramona0.1.3-0.1.0.delta" sparkle:deltaFrom="0.1.0" length="29182" type="application/octet-stream" sparkle:deltaFromSparkleExecutableSize="977616" sparkle:deltaFromSparkleLocales="de,he,ar,el,ja,fa,uk" sparkle:edSignature="6FnjRtdDn+dA2cvzW2+TiN9xZV3Sgc3xMlP99PLU9dUL+6xDPIVGk6J4MFTZRBFgU65Z4YiJnyEj0PydpFq7AA=="/>
+            </sparkle:deltas>
+        </item>
+        <item>
             <title>0.1.2</title>
             <pubDate>Tue, 21 Jul 2026 11:09:24 +0400</pubDate>
             <link>https://github.com/LexxaRRioo/ramona-game</link>
