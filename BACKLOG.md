@@ -34,6 +34,7 @@ Ideas checklist - add as they come up, check off once shipped (note the version)
 - [x] Debug menu "Force Action": confirmed via code reading (not just inspection - traced the full call chain) that it already applies immediately - `Picker.onChange` -> `AppDelegate.forceAction` -> `BehaviorEngine.setForcedAction` -> `evaluateAction()` -> `onStateChange` -> `CatScene.apply` all run synchronously on the main thread with no Timer/dispatch in between. No fix needed - pending release.
 - [x] Dev-only toggle to hide the sprite/overlay entirely while Claude is working in the repo - `RAMONA_HIDDEN=1` env var now skips creating the overlay window in `AppDelegate.applicationDidFinishLaunching`, while the behavior engine/accessibility flow still start normally - pending release.
 - [x] Debug menu option to auto-cycle through every CatAction on a timer (walk, idle, sleep, groom, seekAttention, climb, ...) - added "Auto-Cycle Actions (QA)" toggle, steps through `CatAction.allCases` every 5s via `AppDelegate.setAutoCycle` - pending release.
+- [x] Leaving `.climb` for any other action (found via manual climb -> sleep testing: she fell to the Dock, curling up mid-fall) unconditionally reset `currentSurface` to `.floor` in `CatScene.apply`, racing the next action's own settle - she should be able to rest/groom/idle/walk on whatever surface she climbed to, not just the floor. Removed the forced reset entirely; she now stays on the window until something actually displaces her (it closes/moves off-screen, or a manual drop) - pending release.
 
 ## Behavior / feel
 

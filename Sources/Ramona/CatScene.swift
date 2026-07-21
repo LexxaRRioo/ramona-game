@@ -242,16 +242,23 @@ final class CatScene: SKScene {
     /// or mood changes. Mood only tints the placeholder for now - real
     /// per-mood animations arrive with Phase 5 art.
     func apply(action: CatAction, mood: Mood, needs: NeedsState) {
-        if !justLanded {
-            if action == .climb && currentAction != .climb {
-                // Entering climb: head for whatever window is currently
-                // trackable. CatAction.climb already scores 0 when none is
-                // available, so this should always find one in practice.
-                if let windowFrame, isValidPerch(windowFrame) {
-                    currentSurface = .window(windowFrame)
-                }
-            } else if action != .climb && currentAction == .climb {
-                currentSurface = .floor
+        if !justLanded, action == .climb, currentAction != .climb {
+            // Entering climb: head for whatever window is currently
+            // trackable. CatAction.climb already scores 0 when none is
+            // available, so this should always find one in practice.
+            //
+            // Leaving climb deliberately does NOT reset currentSurface back
+            // to .floor - she stays wherever she climbed to (sleeping,
+            // grooming, idling, walking up there are all fine) until
+            // something actually displaces her: the window closing/moving
+            // off-screen (setTargetWindow), or a manual drop. An earlier
+            // version forced currentSurface = .floor here on every climb
+            // exit, which raced with the next action's settle - e.g.
+            // switching to .sleep read as curling up mid-fall, since the
+            // lie-down animation started playing while she was still
+            // mid-drop to the wrong (floor/Dock) ground line.
+            if let windowFrame, isValidPerch(windowFrame) {
+                currentSurface = .window(windowFrame)
             }
         }
         justLanded = false
