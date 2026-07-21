@@ -52,6 +52,10 @@ final class CatScene: SKScene {
     /// Odds that entering .seekAttention plays the "sits in a far corner and
     /// meows" variant instead of the usual run/leap across the screen.
     private let meowChance: Double = 0.2
+    /// Odds that settling into .idle (from a standstill, not right after
+    /// walking/climbing/seeking) plays a rare batting-at-nothing flourish
+    /// instead of the ordinary front-facing settle.
+    private let battingChance: Double = 0.08
     /// .play: once within this distance of the toy, she stops chasing and
     /// starts swiping at it instead - same spirit as stalkRadius.
     private let playEngageRadius: CGFloat = 90
@@ -876,6 +880,11 @@ final class CatScene: SKScene {
                 // She just stopped moving - settle facing the direction she
                 // was headed instead of snapping to the front-facing pose.
                 playClip(lastFacingRight ? CatSprites.sitRight : CatSprites.sitLeft)
+            } else if Double.random(in: 0..<1) < battingChance {
+                // Rare idle flourish: bats at nothing in particular - reuses
+                // the toy's paw-swipe clip, so it reads as restless/playful
+                // even with no toy out.
+                playClip(CatSprites.pawSwipeFront)
             } else {
                 // Wasn't moving beforehand - the ordinary front-facing settle.
                 playClip(CatSprites.sitDown, then: CatSprites.sitIdle)
