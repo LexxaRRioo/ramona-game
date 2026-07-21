@@ -132,4 +132,30 @@ import Testing
         )
         #expect(next == .floor)
     }
+
+    // MARK: - offersHigherPerch: climb-targeting bias (BACKLOG's climb entry)
+
+    @Test func offersHigherPerchIsTrueWhenTheWindowTopIsAboveCurrentGroundY() {
+        let window = CGRect(x: 100, y: 300, width: 400, height: 200)
+        #expect(FloorTracking.offersHigherPerch(windowFrame: window, currentGroundY: 60, sceneSize: sceneSize, minPerchWidth: minPerchWidth))
+    }
+
+    @Test func offersHigherPerchIsFalseWhenAlreadyStandingOnThatWindow() {
+        let window = CGRect(x: 100, y: 300, width: 400, height: 200)
+        #expect(!FloorTracking.offersHigherPerch(windowFrame: window, currentGroundY: window.maxY, sceneSize: sceneSize, minPerchWidth: minPerchWidth))
+    }
+
+    @Test func offersHigherPerchIsFalseWhenTheWindowIsLower() {
+        let window = CGRect(x: 100, y: 20, width: 400, height: 30)
+        #expect(!FloorTracking.offersHigherPerch(windowFrame: window, currentGroundY: 300, sceneSize: sceneSize, minPerchWidth: minPerchWidth))
+    }
+
+    @Test func offersHigherPerchIsFalseWithNoWindow() {
+        #expect(!FloorTracking.offersHigherPerch(windowFrame: nil, currentGroundY: 20, sceneSize: sceneSize, minPerchWidth: minPerchWidth))
+    }
+
+    @Test func offersHigherPerchIsFalseWhenTheWindowIsTooNarrowToLandOn() {
+        let tooNarrow = CGRect(x: 100, y: 300, width: 40, height: 200)
+        #expect(!FloorTracking.offersHigherPerch(windowFrame: tooNarrow, currentGroundY: 20, sceneSize: sceneSize, minPerchWidth: minPerchWidth))
+    }
 }

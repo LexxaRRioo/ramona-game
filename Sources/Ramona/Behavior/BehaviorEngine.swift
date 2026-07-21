@@ -26,18 +26,37 @@ final class BehaviorEngine {
     /// CatAction.climb's score. Kept up to date by AppDelegate from the
     /// same live tracking CatScene uses (see FrontmostWindowTracker).
     private var isWindowAvailable = false
+    /// Whether the currently tracked window is a strictly higher perch than
+    /// wherever she's standing right now - biases CatAction.climb's score so
+    /// she actively heads for the nearest highest reachable point instead of
+    /// only climbing when the utility AI happens to pick .climb regardless
+    /// of height (see CatScene.higherPerchAvailable, BACKLOG's climb-targeting
+    /// entry). Kept separate from isWindowAvailable, which just gates climb
+    /// open/closed on whether anything is trackable at all.
+    private var isHigherPerchAvailable = false
     /// Debug override (menu bar "Force Action"). When set, scoring is bypassed
     /// and this action is pinned every tick; nil restores autonomous behavior.
     private var forcedAction: CatAction?
+    /// Clock/randomness/persistence seams - real callers use the defaults
+    /// (wall-clock time, true randomness, disk persistence); tests inject
+    /// deterministic replacements so tick/evaluateAction's decay math,
+    /// switch-margin, and flourish-chance logic can be verified without
+    /// depending on real time or touching the real save file on disk.
+    private let now: () -> Date
+    private let randomDouble: () -> Double
+    private let persist: (CatSaveState) -> Void
 
-    init(species: SpeciesDefinition, saveState: CatSaveState?) {
+    init(species: SpeciesDefinition, saveState: CatSaveState?, now: @escaping () -> Date = Date.init, randomDouble: @escaping () -> Double = { Double.random(in: 0..<1) }, persist: @escaping (CatSaveState) -> Void = { $0.persist() }) {
         self.species = species
+        self.now = now
+        self.randomDouble = randomDouble
+        self.persist = persist
         if let saveState {
             needs = saveState.needs
             lastUpdate = saveState.lastUpdate
         } else {
             needs = .full
-            lastUpdate = Date()
+            lastUpdate = now()
         }
         mood = Mood(needs: needs)
     }
@@ -72,7 +91,7 @@ final class BehaviorEngine {
     }
 
     func saveNow() {
-        CatSaveState(needs: needs, lastUpdate: lastUpdate).persist()
+        persist(CatSaveState(needs: needs, lastUpdate: lastUpdate))
     }
 
     /// User pet her (Phase 4). Instant social-need refill.
@@ -104,6 +123,10 @@ final class BehaviorEngine {
         isWindowAvailable = available
     }
 
+    func setHigherPerchAvailable(_ available: Bool) {
+        isHigherPerchAvailable = available
+    }
+
     /// Menu bar "Force Action" debug control. Pass an action to pin it, or nil
     /// to hand control back to the utility AI. Re-evaluates immediately so the
     /// cat reacts without waiting for the next tick.
@@ -113,10 +136,10 @@ final class BehaviorEngine {
     }
 
     private func tick(forceNotify: Bool = false) {
-        let now = Date()
+        let currentTime = now()
         let isActive = currentAction == .walk || currentAction == .seekAttention || currentAction == .climb
-        needs.decay(over: now.timeIntervalSince(lastUpdate), traits: species.traits, isSleeping: currentAction == .sleep, isActive: isActive)
-        lastUpdate = now
+        needs.decay(over: currentTime.timeIntervalSince(lastUpdate), traits: species.traits, isSleeping: currentAction == .sleep, isActive: isActive)
+        lastUpdate = currentTime
         mood = Mood(needs: needs)
 
         evaluateAction(forceNotify: forceNotify)
@@ -130,10 +153,10 @@ final class BehaviorEngine {
             return
         }
 
-        let hour = Double(Calendar.current.component(.hour, from: Date()))
+        let hour = Double(Calendar.current.component(.hour, from: now()))
         let candidates: [CatAction] = [.walk, .idle, .sleep, .seekAttention, .climb, .groom]
         let scored = candidates.map { action in
-            (action, action.score(needs: needs, traits: species.traits, sleepWindows: species.schedule.sleepWindows, hour: hour, windowAvailable: isWindowAvailable))
+            (action, action.score(needs: needs, traits: species.traits, sleepWindows: species.schedule.sleepWindows, hour: hour, windowAvailable: isWindowAvailable, higherPerchAvailable: isHigherPerchAvailable))
         }
 
         let previousAction = currentAction
@@ -149,7 +172,7 @@ final class BehaviorEngine {
         // used to fire unconditionally too, replaying the settle animation
         // even mid-sleep - kept now as a rare randomized flourish instead.
         let isRealTransition = currentAction != previousAction
-        if forceNotify || isRealTransition || Double.random(in: 0..<1) < flourishChance {
+        if forceNotify || isRealTransition || randomDouble() < flourishChance {
             onStateChange?(currentAction, mood)
         }
     }

@@ -48,7 +48,13 @@ enum CatAction: Hashable, CaseIterable {
     /// enough, not just at scheduled hours. climb is the one exception: it's
     /// hard-gated to 0 with no window to climb onto, since "climb toward
     /// nothing" isn't a real option the way "nap outside nap hours" is.
-    func score(needs: NeedsState, traits: SpeciesDefinition.TraitWeights, sleepWindows: [SleepWindow], hour: Double, windowAvailable: Bool) -> Double {
+    /// Added to climb's score when `higherPerchAvailable` is true - "actively
+    /// evaluate whether there's a reachable nearest highest point and prefer
+    /// it" (BACKLOG), big enough to clear actionSwitchMargin against idle's
+    /// constant 0.45 baseline for any trait combination, not just bold cats.
+    static let climbPreferenceBoost: Double = 0.3
+
+    func score(needs: NeedsState, traits: SpeciesDefinition.TraitWeights, sleepWindows: [SleepWindow], hour: Double, windowAvailable: Bool, higherPerchAvailable: Bool) -> Double {
         switch self {
         case .sleep:
             var score = (1 - needs.energy) * (0.5 + traits.laziness)
@@ -70,7 +76,8 @@ enum CatAction: Hashable, CaseIterable {
             return (1 - needs.social) * (0.5 + traits.sociability)
         case .climb:
             guard windowAvailable else { return 0 }
-            return traits.boldness * 0.6 + traits.playfulness * 0.1
+            let base = traits.boldness * 0.6 + traits.playfulness * 0.1
+            return higherPerchAvailable ? base + Self.climbPreferenceBoost : base
         }
     }
 }

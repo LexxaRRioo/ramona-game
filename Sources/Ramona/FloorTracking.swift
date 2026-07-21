@@ -40,6 +40,23 @@ enum FloorTracking {
         return (groundMargin, sideMargin, sceneSize.width - sideMargin)
     }
 
+    /// Whether a candidate window sits meaningfully higher than wherever
+    /// she's currently standing - the basis for CatAction.climb's "prefer
+    /// the nearest highest point" bias (BACKLOG: climb targeting), rather
+    /// than climb only ever winning by luck of the trait-weighted scoring.
+    /// False once she's already standing on that same window, since her own
+    /// ground line then equals its top edge (not strictly higher than
+    /// itself) - so this doesn't keep nudging her to "reclimb" where she is.
+    static func offersHigherPerch(
+        windowFrame: CGRect?,
+        currentGroundY: CGFloat,
+        sceneSize: CGSize,
+        minPerchWidth: CGFloat
+    ) -> Bool {
+        guard let windowFrame, isValidPerch(windowFrame, sceneSize: sceneSize, minPerchWidth: minPerchWidth) else { return false }
+        return windowFrame.maxY > currentGroundY
+    }
+
     /// Decides what her surface should become when the live window tracker
     /// reports an update, while she's standing on a window. Any valid new
     /// frame is followed - whether it's the same window continuing to move,

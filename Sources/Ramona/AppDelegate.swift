@@ -222,6 +222,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         tracker.onFrameChange = { [weak self] frame, isSameWindow in
             self?.overlayWindowController?.catScene.setTargetWindow(frame, isSameWindow: isSameWindow)
             self?.behaviorEngine?.setWindowAvailable(frame != nil)
+            self?.behaviorEngine?.setHigherPerchAvailable(self?.overlayWindowController?.catScene.higherPerchAvailable ?? false)
         }
         windowTracker = tracker
     }

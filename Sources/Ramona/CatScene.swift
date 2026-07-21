@@ -430,6 +430,17 @@ final class CatScene: SKScene {
         )
     }
 
+    /// Whether the currently-tracked frontmost window is a strictly higher
+    /// perch than wherever she's standing right now - see
+    /// FloorTracking.offersHigherPerch. AppDelegate feeds this into
+    /// BehaviorEngine.setHigherPerchAvailable so CatAction.climb can prefer
+    /// heading up onto it instead of only ever winning by trait-weighted luck.
+    var higherPerchAvailable: Bool {
+        FloorTracking.offersHigherPerch(
+            windowFrame: windowFrame, currentGroundY: groundBounds().y, sceneSize: size, minPerchWidth: minPerchWidth
+        )
+    }
+
     /// Resets any in-flight actions/scale, ready for a new settle/jump move -
     /// shared by applyCurrentAction and playJumpToCurrentSurface, which each
     /// compute their own target X/duration from the returned ground line
