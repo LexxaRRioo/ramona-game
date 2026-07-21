@@ -219,10 +219,25 @@ final class CatScene: SKScene {
         case .floor: surfaceText = "floor"
         case .window: surfaceText = "window"
         }
+        let toyText: String
+        if let toy {
+            let toySurfaceText: String
+            switch toy.surface {
+            case .floor: toySurfaceText = "floor"
+            case .window: toySurfaceText = "window"
+            }
+            toyText = String(
+                format: "toy: %@ pos:(%.0f,%.0f) surf:%@ resting:%@ held:%@",
+                toy.item.id, toy.node.position.x, toy.node.position.y, toySurfaceText,
+                toy.isResting ? "yes" : "no", toy.isHeld ? "yes" : "no"
+            )
+        } else {
+            toyText = "toy: none"
+        }
         debugLabel.text = String(
-            format: "action: %@\nsurface: %@\nmood: %@\nhunger: %.2f\nenergy: %.2f\nplay: %.2f\nsocial: %.2f",
+            format: "action: %@\nsurface: %@\nmood: %@\nhunger: %.2f\nenergy: %.2f\nplay: %.2f\nsocial: %.2f\nplayDrive: %.2f\n%@",
             String(describing: action), surfaceText, String(describing: mood),
-            needs.hunger, needs.energy, needs.play, needs.social
+            needs.hunger, needs.energy, needs.play, needs.social, needs.playDrive, toyText
         )
     }
 

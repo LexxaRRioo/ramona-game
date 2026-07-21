@@ -80,6 +80,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
+    /// Debug menu "Spawn Cable Tie (QA)" - calls CatScene.spawnToy directly
+    /// with the cable_tie item, skipping offerToy's random-preference
+    /// selection entirely. Lets a live test isolate whether a reported
+    /// "Offer Toy does nothing" bug is in that selection logic or in
+    /// spawnToy/ToyNode itself - check the debug HUD's "toy:" line
+    /// afterward for its actual position/surface/state.
+    func debugSpawnCableTie() {
+        guard let item = items.first(where: { $0.id == "cable_tie" }) else { return }
+        overlayWindowController?.catScene.spawnToy(item)
+        behaviorEngine?.setToyAvailable(true)
+    }
+
     /// Debug menu "Force Action" - pins the cat to a chosen action for
     /// previewing animations, or nil to resume autonomous behavior.
     func forceAction(_ action: CatAction?) {

@@ -55,6 +55,10 @@ struct RamonaApp: App {
                         forcedAction = nil
                         appDelegate.setAutoCycle(enabled)
                     }
+                Divider()
+                Button("Spawn Cable Tie (QA)") {
+                    appDelegate.debugSpawnCableTie()
+                }
             }
             Divider()
             Button("Quit Ramona") {
