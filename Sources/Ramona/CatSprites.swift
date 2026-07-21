@@ -132,6 +132,34 @@ enum CatSprites {
     /// there's no pop at the hand-off.
     static let sleepRight = CatClip(textures: [frame(row: 6, col: 9)], timePerFrame: 1, loops: false, groundAnchors: [0.375])
     static let sleepLeft = CatClip(textures: [frame(row: 6, col: 8)], timePerFrame: 1, loops: false, groundAnchors: [0.375])
+    /// Two more curled sleeping poses ("Sleep 2"/"Sleep 3" per the pack's
+    /// labeled reference sheet, rows 48-51) - measured at the same 38pt
+    /// visible height above their ground line as the row-6 curl above, so
+    /// swapping between all three at the lie-down transition's hand-off
+    /// reads as "she settled into a slightly different curl" rather than a
+    /// pop (see randomCurledRestPose). Anchors measured the same way as
+    /// sleepRight/Left's (lowest opaque pixel row).
+    static let sleep2Right = CatClip(textures: [frame(row: 49, col: 0)], timePerFrame: 1, loops: false, groundAnchors: [0.3594])
+    static let sleep2Left = CatClip(textures: [frame(row: 48, col: 0)], timePerFrame: 1, loops: false, groundAnchors: [0.3594])
+    static let sleep3Right = CatClip(textures: [frame(row: 51, col: 0)], timePerFrame: 1, loops: false, groundAnchors: [0.3594])
+    static let sleep3Left = CatClip(textures: [frame(row: 50, col: 0)], timePerFrame: 1, loops: false, groundAnchors: [0.3594])
+    /// Picks a random compact curled pose facing the given side - roughly
+    /// half a sit/stand pose's vertical footprint (38pt vs. ~62pt above the
+    /// ground line). Used both by CatAction.sleep's held pose (for variety,
+    /// once the lie-down transition finishes) and CatScene's occlusion
+    /// fallback (see FloorTracking.perchLeavesHerOccluded) - a standing/
+    /// sitting pose substituted here whenever the current perch doesn't
+    /// leave enough headroom before the menu bar. Both needs are the same:
+    /// "as short as possible, aware of which way she's facing."
+    static func randomCurledRestPose(right: Bool) -> CatClip {
+        let pool: [(right: CatClip, left: CatClip)] = [
+            (sleepRight, sleepLeft),
+            (sleep2Right, sleep2Left),
+            (sleep3Right, sleep3Left)
+        ]
+        let pose = pool.randomElement()!
+        return right ? pose.right : pose.left
+    }
     /// Front-facing self-grooming (row 12, paw wipes across the face/cheek) -
     /// "cleans herself", a content resting activity she does between walks.
     /// Row 17 looks similar at a glance but the paw raises well above her

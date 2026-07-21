@@ -67,6 +67,16 @@ final class CatScene: SKScene {
     /// rather than a deliberate "she noticed, then reacted" rhythm.
     private let playReactionDelay: ClosedRange<TimeInterval> = 0.8...1.4
     private var nextPlayReactionTime: TimeInterval = 0
+    /// How much vertical room (points) a standing/sitting pose needs above
+    /// its ground line before the menu bar's own status items (which always
+    /// render above Ramona's overlay window - see OverlayWindow's level
+    /// comment) start clipping her. Measured worst case: sit/stand poses
+    /// reach ~62pt above their ground line (walkRight/sitRight/etc. all
+    /// share the same topmost opaque row in the sheet), plus a generous
+    /// ~38pt for the tallest (notched) menu bar - a flat estimate rather
+    /// than querying individual status item frames. See
+    /// FloorTracking.perchLeavesHerOccluded.
+    private let occlusionClearance: CGFloat = 100
 
     /// Cache of the live-tracked frontmost window's frame (Phase 2), kept
     /// up to date regardless of whether she's currently on it - it's what
@@ -866,6 +876,12 @@ final class CatScene: SKScene {
         let clampedX = min(max(cat.position.x, groundMinX), groundMaxX)
         let duration = settleDuration(distance: hypot(clampedX - cat.position.x, groundY - cat.position.y))
         let settle = SKAction.move(to: CGPoint(x: clampedX, y: groundY), duration: duration)
+        // Whichever standing/sitting pose a case below would otherwise play,
+        // substitute a compact curled-up pose instead - much less vertical
+        // room needed than sitting/standing, so she doesn't get clipped by
+        // the menu bar's own status items looming above wherever she's
+        // perched (a maximized window, or the menu bar strip itself).
+        let isOccluded = FloorTracking.perchLeavesHerOccluded(groundY: groundY, sceneHeight: size.height, requiredClearance: occlusionClearance)
 
         switch currentAction {
         case .walk:
@@ -891,7 +907,9 @@ final class CatScene: SKScene {
                 }
             }
         case .idle:
-            if previousAction == .walk || previousAction == .climb || previousAction == .seekAttention {
+            if isOccluded {
+                playClip(CatSprites.randomCurledRestPose(right: lastFacingRight))
+            } else if previousAction == .walk || previousAction == .climb || previousAction == .seekAttention {
                 // She just stopped moving - settle facing the direction she
                 // was headed instead of snapping to the front-facing pose.
                 playClip(lastFacingRight ? CatSprites.sitRight : CatSprites.sitLeft)
@@ -910,6 +928,8 @@ final class CatScene: SKScene {
                 // Grooms lying down right after waking, rather than sitting
                 // up first.
                 playClip(CatSprites.groomLying)
+            } else if isOccluded {
+                playClip(CatSprites.randomCurledRestPose(right: lastFacingRight))
             } else {
                 // Sits and cleans herself - a content between-walks rest
                 // activity. A rare chance she scratches instead of washing -
@@ -924,9 +944,14 @@ final class CatScene: SKScene {
             // lieDownLeft) - picking a side fresh each time she settles
             // (including the periodic re-settle flourish) keeps every
             // individual settle internally consistent without needing to
-            // remember which side she picked last nap.
+            // remember which side she picked last nap. The held pose itself
+            // is randomized among a few similarly-sized curled poses (see
+            // CatSprites.randomCurledRestPose) instead of always the same
+            // one, without needing a matching transition per pose - they're
+            // close enough in silhouette/size that swapping which one the
+            // curl-in transition hands off to doesn't pop.
             let curlsRight = Bool.random()
-            playClip(curlsRight ? CatSprites.lieDownRight : CatSprites.lieDownLeft, then: curlsRight ? CatSprites.sleepRight : CatSprites.sleepLeft)
+            playClip(curlsRight ? CatSprites.lieDownRight : CatSprites.lieDownLeft, then: CatSprites.randomCurledRestPose(right: curlsRight))
             cat.run(settle)
             // Runs on catVisual, not cat: cat.position is the settle/walk
             // target, and scaling that node too would compound with
@@ -937,7 +962,10 @@ final class CatScene: SKScene {
                 .scaleY(to: 1.0, duration: 1.8)
             ])), withKey: "breath")
         case .seekAttention:
-            if Double.random(in: 0..<1) < meowChance {
+            if isOccluded {
+                playClip(CatSprites.randomCurledRestPose(right: lastFacingRight))
+                cat.run(settle)
+            } else if Double.random(in: 0..<1) < meowChance {
                 // Rare variant: stays put and meows instead of pacing - one
                 // of three postures for variety, rather than always the same.
                 playClip([CatSprites.meowSit, CatSprites.meowLie, CatSprites.meowStand].randomElement()!)

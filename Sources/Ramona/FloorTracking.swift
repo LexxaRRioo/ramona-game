@@ -57,6 +57,20 @@ enum FloorTracking {
         return windowFrame.maxY > currentGroundY
     }
 
+    /// Whether a standing/sitting pose at this ground line would poke up
+    /// into the menu bar's own rendering band and get visually clipped -
+    /// Ramona's overlay window intentionally renders below the menu bar and
+    /// its status items (see OverlayWindow's level comment), so a perch
+    /// close enough to the very top of the screen (a maximized window, or
+    /// the menu bar strip itself) leaves no room for a standing/sitting
+    /// pose before it's covered. requiredClearance is a flat worst-case
+    /// estimate (tallest pose's visible height above its ground line, plus
+    /// the tallest menu bar) rather than querying individual status item
+    /// frames - see CatScene.occlusionClearance.
+    static func perchLeavesHerOccluded(groundY: CGFloat, sceneHeight: CGFloat, requiredClearance: CGFloat) -> Bool {
+        sceneHeight - groundY < requiredClearance
+    }
+
     /// Decides what her surface should become when the live window tracker
     /// reports an update, while she's standing on a window. Any valid new
     /// frame is followed - whether it's the same window continuing to move,

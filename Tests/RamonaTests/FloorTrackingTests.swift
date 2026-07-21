@@ -158,4 +158,23 @@ import Testing
         let tooNarrow = CGRect(x: 100, y: 300, width: 40, height: 200)
         #expect(!FloorTracking.offersHigherPerch(windowFrame: tooNarrow, currentGroundY: 20, sceneSize: sceneSize, minPerchWidth: minPerchWidth))
     }
+
+    // MARK: - perchLeavesHerOccluded: menu bar clipping (BACKLOG's occlusion entry)
+
+    @Test func perchNearTheTopOfTheScreenIsOccluded() {
+        // A near-maximized window's top edge, right under the menu bar.
+        #expect(FloorTracking.perchLeavesHerOccluded(groundY: 750, sceneHeight: sceneSize.height, requiredClearance: 100))
+    }
+
+    @Test func perchWithPlentyOfHeadroomIsNotOccluded() {
+        #expect(!FloorTracking.perchLeavesHerOccluded(groundY: 300, sceneHeight: sceneSize.height, requiredClearance: 100))
+    }
+
+    @Test func perchExactlyAtTheClearanceThresholdIsNotOccluded() {
+        #expect(!FloorTracking.perchLeavesHerOccluded(groundY: sceneSize.height - 100, sceneHeight: sceneSize.height, requiredClearance: 100))
+    }
+
+    @Test func floorGroundLineIsNeverOccluded() {
+        #expect(!FloorTracking.perchLeavesHerOccluded(groundY: 20, sceneHeight: sceneSize.height, requiredClearance: 100))
+    }
 }
