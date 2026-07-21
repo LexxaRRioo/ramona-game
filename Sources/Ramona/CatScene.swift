@@ -218,6 +218,11 @@ final class CatScene: SKScene {
     private var lastDebugAction: CatAction = .idle
     private var lastDebugMood: Mood = .content
     private var lastDebugNeeds: NeedsState = .full
+    /// Incremented every setTargetWindow call (regardless of whether
+    /// anything actually changed) - lets a live test see whether window
+    /// updates are arriving at all, distinct from "arriving but not being
+    /// applied" (window-tracking investigation).
+    private var windowUpdateCount = 0
 
     private func updateDebugText(action: CatAction, mood: Mood, needs: NeedsState) {
         lastDebugAction = action
@@ -234,11 +239,21 @@ final class CatScene: SKScene {
         renderDebugText()
     }
 
+    private func rectText(_ rect: CGRect?) -> String {
+        guard let rect else { return "none" }
+        return String(format: "(%.0f,%.0f,%.0fx%.0f)", rect.minX, rect.minY, rect.width, rect.height)
+    }
+
     private func renderDebugText() {
         let surfaceText: String
+        let onWindowFrame: CGRect?
         switch currentSurface {
-        case .floor: surfaceText = "floor"
-        case .window: surfaceText = "window"
+        case .floor:
+            surfaceText = "floor"
+            onWindowFrame = nil
+        case .window(let frame):
+            surfaceText = "window"
+            onWindowFrame = frame
         }
         let toyText: String
         if let toy {
@@ -255,10 +270,20 @@ final class CatScene: SKScene {
         } else {
             toyText = "toy: none"
         }
+        // trackedWindow: whatever FrontmostWindowTracker currently reports as
+        // the live frontmost window (windowFrame) - should keep changing as
+        // you drag ANY window, regardless of whether she's standing on it.
+        // onWindow: the specific window frame she's actually anchored to
+        // (only set while currentSurface == .window) - should match
+        // trackedWindow and update together if tracking is working for her
+        // specific window. updates: increments on every setTargetWindow
+        // call - if this stops climbing while dragging a window, no update
+        // is arriving at all.
         debugLabel.text = String(
-            format: "action: %@\nsurface: %@\nmood: %@\nhunger: %.2f\nenergy: %.2f\nplay: %.2f\nsocial: %.2f\nplayDrive: %.2f\n%@",
+            format: "action: %@\nsurface: %@\nmood: %@\nhunger: %.2f\nenergy: %.2f\nplay: %.2f\nsocial: %.2f\nplayDrive: %.2f\n%@\ncatPos: (%.0f,%.0f)\ntrackedWindow: %@\nonWindow: %@\nupdates: %d",
             String(describing: lastDebugAction), surfaceText, String(describing: lastDebugMood),
-            lastDebugNeeds.hunger, lastDebugNeeds.energy, lastDebugNeeds.play, lastDebugNeeds.social, lastDebugNeeds.playDrive, toyText
+            lastDebugNeeds.hunger, lastDebugNeeds.energy, lastDebugNeeds.play, lastDebugNeeds.social, lastDebugNeeds.playDrive, toyText,
+            cat.position.x, cat.position.y, rectText(windowFrame), rectText(onWindowFrame), windowUpdateCount
         )
     }
 
@@ -282,10 +307,14 @@ final class CatScene: SKScene {
     /// specifically what she's standing on.
     func setTargetWindow(_ frame: CGRect?, isSameWindow: Bool) {
         windowFrame = (frame.map(isValidPerch) == true) ? frame : nil
+        windowUpdateCount += 1
 
         guard let next = FloorTracking.nextSurface(
             afterWindowUpdate: frame, currentSurface: currentSurface, sceneSize: size, minPerchWidth: minPerchWidth
-        ) else { return }
+        ) else {
+            refreshDebugText()
+            return
+        }
 
         // Only follow this transition for the toy if it was on the SAME
         // window she was (checked against the pre-transition currentSurface)
@@ -306,6 +335,7 @@ final class CatScene: SKScene {
         case .floor: dropToGround()
         case .window: isJump ? playJumpToCurrentSurface() : applyCurrentAction()
         }
+        refreshDebugText()
     }
 
     /// Called after a completed drag (Phase 4), with whichever surface (if
