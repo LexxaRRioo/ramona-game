@@ -241,4 +241,70 @@ private final class MutableClock {
         engine.pet()
         #expect(engine.needs.social > NeedsState.floor)
     }
+
+    @Test func sixPetsWithinTenSecondsWakeHerFromSleep() {
+        let traits = SpeciesDefinition.TraitWeights(playfulness: 0.5, laziness: 0.5, foodMotivation: 0.5, boldness: 0.5, sociability: 0.5)
+        let saveState = CatSaveState(needs: .full, lastUpdate: base)
+        let engine = BehaviorEngine(species: makeSpecies(traits: traits), saveState: saveState,
+                                    now: { self.base }, randomDouble: { 1 }, persist: { _ in })
+        engine.setForcedAction(.sleep)
+        for _ in 0..<5 {
+            engine.pet()
+            #expect(engine.currentAction == .sleep)
+        }
+        engine.pet()
+        #expect(engine.currentAction != .sleep)
+    }
+
+    @Test func fivePetsWithinTenSecondsDoNotWakeHerFromSleep() {
+        let traits = SpeciesDefinition.TraitWeights(playfulness: 0.5, laziness: 0.5, foodMotivation: 0.5, boldness: 0.5, sociability: 0.5)
+        let saveState = CatSaveState(needs: .full, lastUpdate: base)
+        let engine = BehaviorEngine(species: makeSpecies(traits: traits), saveState: saveState,
+                                    now: { self.base }, randomDouble: { 1 }, persist: { _ in })
+        engine.setForcedAction(.sleep)
+        for _ in 0..<5 {
+            engine.pet()
+        }
+        #expect(engine.currentAction == .sleep)
+    }
+
+    @Test func petBurstSpreadOverMoreThanTenSecondsDoesNotWakeHer() {
+        let clock = MutableClock(base)
+        let traits = SpeciesDefinition.TraitWeights(playfulness: 0.5, laziness: 0.5, foodMotivation: 0.5, boldness: 0.5, sociability: 0.5)
+        let saveState = CatSaveState(needs: .full, lastUpdate: base)
+        let engine = BehaviorEngine(species: makeSpecies(traits: traits), saveState: saveState,
+                                    now: clock.now, randomDouble: { 1 }, persist: { _ in })
+        engine.setForcedAction(.sleep)
+        for i in 0..<6 {
+            clock.current = base.addingTimeInterval(Double(i) * 3)
+            engine.pet()
+        }
+        #expect(engine.currentAction == .sleep)
+    }
+
+    @Test func petBurstDoesNotAffectHerWhenAlreadyAwake() {
+        let traits = SpeciesDefinition.TraitWeights(playfulness: 0.5, laziness: 0.5, foodMotivation: 0.5, boldness: 0.5, sociability: 0.5)
+        let saveState = CatSaveState(needs: .full, lastUpdate: base)
+        let engine = BehaviorEngine(species: makeSpecies(traits: traits), saveState: saveState,
+                                    now: { self.base }, randomDouble: { 1 }, persist: { _ in })
+        engine.setForcedAction(.idle)
+        for _ in 0..<6 {
+            engine.pet()
+        }
+        #expect(engine.currentAction == .idle)
+    }
+
+    @Test func threeHoldsWithinTenSecondsWakeHerFromSleep() {
+        let traits = SpeciesDefinition.TraitWeights(playfulness: 0.5, laziness: 0.5, foodMotivation: 0.5, boldness: 0.5, sociability: 0.5)
+        let saveState = CatSaveState(needs: .full, lastUpdate: base)
+        let engine = BehaviorEngine(species: makeSpecies(traits: traits), saveState: saveState,
+                                    now: { self.base }, randomDouble: { 1 }, persist: { _ in })
+        engine.setForcedAction(.sleep)
+        engine.holdStarted()
+        #expect(engine.currentAction == .sleep)
+        engine.holdStarted()
+        #expect(engine.currentAction == .sleep)
+        engine.holdStarted()
+        #expect(engine.currentAction != .sleep)
+    }
 }

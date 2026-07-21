@@ -46,6 +46,15 @@ final class BehaviorEngine {
     /// Debug override (menu bar "Force Action"). When set, scoring is bypassed
     /// and this action is pinned every tick; nil restores autonomous behavior.
     private var forcedAction: CatAction?
+    /// Rolling timestamp windows for "intense interaction" wake-ups (BACKLOG:
+    /// a burst of pets or pickups should rouse her mid-sleep) - see
+    /// registerIntenseInteraction. Separate arrays since pets and holds have
+    /// different thresholds.
+    private let intenseInteractionWindow: TimeInterval = 10
+    private let petWakeThreshold = 6
+    private let holdWakeThreshold = 3
+    private var recentPetTimestamps: [Date] = []
+    private var recentHoldTimestamps: [Date] = []
     /// Fires when a `.play` session fills the play need all the way - the
     /// toy should despawn and her "wants to play" drive resets, ready to
     /// build back up toward the next session. AppDelegate/CatScene wire this
@@ -112,7 +121,30 @@ final class BehaviorEngine {
     func pet() {
         needs.restore("social", by: 0.5)
         mood = Mood(needs: needs)
+        registerIntenseInteraction(&recentPetTimestamps, threshold: petWakeThreshold)
         evaluateAction()
+    }
+
+    /// User picked her up (right-click drag start). pause() already
+    /// suspends the engine for the hold's duration - this only feeds the
+    /// same intense-interaction wake tracking pet() does, so a burst of
+    /// quick pickups can rouse her the same way a burst of pets can.
+    func holdStarted() {
+        registerIntenseInteraction(&recentHoldTimestamps, threshold: holdWakeThreshold)
+    }
+
+    /// Counts gesture events within a rolling window; once a threshold is
+    /// hit while she's actually asleep, forces one wake (same one-time
+    /// settle-then-release pattern as completeClimb) instead of a
+    /// persistent override - a genuinely tired cat can still drift back to
+    /// sleep on her own merits from the next natural evaluation onward.
+    private func registerIntenseInteraction(_ timestamps: inout [Date], threshold: Int) {
+        let currentTime = now()
+        timestamps.append(currentTime)
+        timestamps.removeAll { currentTime.timeIntervalSince($0) > intenseInteractionWindow }
+        guard timestamps.count >= threshold, currentAction == .sleep else { return }
+        setForcedAction(.idle)
+        setForcedAction(nil)
     }
 
     /// Feed/offer-toy (Phase 5) - applies whatever an ItemDefinition

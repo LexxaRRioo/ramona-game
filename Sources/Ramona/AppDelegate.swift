@@ -167,6 +167,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         scene?.onHoldRequested = { [weak engine] in
             guard let engine, engine.toleratesHold else { return false }
+            engine.holdStarted()
             engine.pause()
             return true
         }
