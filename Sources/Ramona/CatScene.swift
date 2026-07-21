@@ -368,11 +368,13 @@ final class CatScene: SKScene {
     /// Scene-local hit test (Phase 4, extended for the toy). Bounding boxes
     /// of the sprites' current frames, padded a little so the fluffy edges
     /// (and the toy's thin diagonal shape) stay grabbable - true per-pixel
-    /// alpha hit-testing is still a later refinement. Checks the cat first,
-    /// so standing right next to the toy still pets rather than grabs it.
+    /// alpha hit-testing is still a later refinement. Checks the toy first:
+    /// it's always in front of her (z-order), and the smaller/more specific
+    /// target where the two overlap, so a click there should grab/throw it
+    /// rather than pet whatever's underneath.
     func hitTest(_ point: CGPoint) -> HitTarget {
-        if cat.frame.insetBy(dx: -4, dy: -4).contains(point) { return .cat }
         if let toy, toy.node.frame.insetBy(dx: -6, dy: -6).contains(point) { return .toy }
+        if cat.frame.insetBy(dx: -4, dy: -4).contains(point) { return .cat }
         return .none
     }
 
