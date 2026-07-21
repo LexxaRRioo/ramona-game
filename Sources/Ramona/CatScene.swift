@@ -65,6 +65,9 @@ final class CatScene: SKScene {
     /// OverlayWindow's poll and kept here so groundBounds can read it live.
     private var dockSurface: CGRect?
     private var currentSurface: Surface = .floor
+    /// The on-screen toy (cable tie, to start), if one's been offered -
+    /// nil means none is out. See spawnToy/despawnToy, updateToyGroundClamp.
+    private var toy: ToyNode?
     private var currentAction: CatAction = .walk
     /// currentAction from just before the most recent apply() call - lets a
     /// case pick a different clip depending on what she was doing right
@@ -128,6 +131,13 @@ final class CatScene: SKScene {
     override func didMove(to view: SKView) {
         backgroundColor = .clear
         scaleMode = .resizeFill
+        // Much stronger than SpriteKit's real-world default (-9.8) - at
+        // that scale a thrown toy would take ~20s to fall a screen's
+        // height, reading as floating rather than falling. Tuned so a
+        // dropped toy reaches roughly the cat's own dropSpeed (220pt/s)
+        // within a fraction of a second instead - a snappy, light-plastic
+        // fall, not real-world physics. Retune after live playtesting.
+        physicsWorld.gravity = CGVector(dx: 0, dy: -900)
 
         // cat is a positional carrier only, kept invisible (no texture) -
         // its size/anchor just keep hitTest's bounding box consistent.
@@ -210,6 +220,19 @@ final class CatScene: SKScene {
         guard let next = FloorTracking.nextSurface(
             afterWindowUpdate: frame, currentSurface: currentSurface, sceneSize: size, minPerchWidth: minPerchWidth
         ) else { return }
+
+        // Only follow this transition for the toy if it was on the SAME
+        // window she was (checked against the pre-transition currentSurface)
+        // - the live tracker only ever reports the single frontmost window,
+        // so there's no way to tell a toy resting on some other window
+        // apart from one that should legitimately fall here.
+        if let toy, toy.surface == currentSurface {
+            toy.surface = next
+            if case .floor = next {
+                toy.isResting = false
+                toy.node.physicsBody?.affectedByGravity = true
+            }
+        }
 
         let isJump = !isSameWindow && next != currentSurface
         currentSurface = next
@@ -307,6 +330,63 @@ final class CatScene: SKScene {
             .scale(to: 1.2, duration: 0.1), .scale(to: 0.95, duration: 0.1),
             .scale(to: 1.15, duration: 0.1), .scale(to: 1.0, duration: 0.1)
         ]))
+    }
+
+    /// Brings a physical toy on screen, replacing whatever toy (if any) was
+    /// already out - one at a time for now, no reason yet to juggle several.
+    /// Spawns at wherever she's currently standing/its ground line ("stay on
+    /// the same level where Ramona stays"), already resting there.
+    func spawnToy(_ item: ItemDefinition) {
+        toy?.node.removeFromParent()
+        let (groundY, groundMinX, groundMaxX) = groundBounds()
+        let spawnX = min(max(cat.position.x, groundMinX), groundMaxX)
+        let newToy = ToyNode(item: item, at: CGPoint(x: spawnX, y: groundY), surface: currentSurface)
+        toy = newToy
+        addChild(newToy.node)
+    }
+
+    func despawnToy() {
+        toy?.node.removeFromParent()
+        toy = nil
+    }
+
+    /// Per-frame toy physics resolution, called after SpriteKit's own
+    /// physics step (didSimulatePhysics). Deliberately NOT rigid-body
+    /// collision against synthesized level geometry - the window/Dock/floor
+    /// ground line already moves independently of any physics body, so
+    /// keeping a synced collision shape for it would be a lot of ongoing
+    /// complexity for a purely cosmetic outcome. Instead: physics owns the
+    /// toy's velocity/acceleration/damping while it's airborne, and this
+    /// just checks its position against the same FloorTracking.groundBounds
+    /// the cat uses (fed the toy's own, independent surface) every frame.
+    private func updateToyGroundClamp() {
+        guard let toy, !toy.isHeld else { return }
+        let (groundY, minX, maxX) = FloorTracking.groundBounds(
+            currentSurface: toy.surface, dockSurface: dockSurface, sceneSize: size,
+            groundMargin: groundMargin, sideMargin: sideMargin, minPerchWidth: minPerchWidth
+        )
+        var position = toy.node.position
+        if toy.isResting {
+            // Stay glued to the ground line even as it moves (a dragged
+            // window, the Dock appearing/hiding) - the same idea as the
+            // cat's own re-settle keeping her from floating/sinking.
+            position.y = groundY
+        } else if position.y <= groundY {
+            position.y = groundY
+            toy.node.physicsBody?.velocity = .zero
+            toy.node.physicsBody?.affectedByGravity = false
+            toy.isResting = true
+        }
+        let clampedX = min(max(position.x, minX), maxX)
+        if clampedX != position.x {
+            toy.node.physicsBody?.velocity.dx = 0
+            position.x = clampedX
+        }
+        toy.node.position = position
+    }
+
+    override func didSimulatePhysics() {
+        updateToyGroundClamp()
     }
 
     /// "Если взять Р. на руки специально против её воли, она попытается
@@ -423,6 +503,14 @@ final class CatScene: SKScene {
         dockSurface = frame
         if changed, case .floor = currentSurface, !isInteracting {
             applyCurrentAction()
+        }
+        // Un-rest a floor-resting toy so it falls (or re-settles) through
+        // updateToyGroundClamp instead of teleporting straight to the new
+        // ground line - matters most when the Dock disappears out from
+        // under it.
+        if changed, let toy, toy.isResting, case .floor = toy.surface {
+            toy.isResting = false
+            toy.node.physicsBody?.affectedByGravity = true
         }
     }
 

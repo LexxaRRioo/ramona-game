@@ -67,8 +67,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             items.first(where: { $0.id == id && $0.kind == .toy })
         }
         guard let item = preferredToys.randomElement() else { return }
-        behaviorEngine?.use(item)
-        overlayWindowController?.catScene.playToyPulse()
+        // cable_tie is the first toy with real art/physics (Phase B) - it
+        // spawns a physical object instead of the instant-restore-and-pulse
+        // path the other toys (no art yet) still use. Behavior wiring
+        // (scoring/fill-rate/despawn) is a later phase - for now she just
+        // ignores it.
+        if item.id == "cable_tie" {
+            overlayWindowController?.catScene.spawnToy(item)
+        } else {
+            behaviorEngine?.use(item)
+            overlayWindowController?.catScene.playToyPulse()
+        }
     }
 
     /// Debug menu "Force Action" - pins the cat to a chosen action for
