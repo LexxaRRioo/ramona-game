@@ -87,8 +87,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// spawnToy/ToyNode itself - check the debug HUD's "toy:" line
     /// afterward for its actual position/surface/state.
     func debugSpawnCableTie() {
-        guard let item = items.first(where: { $0.id == "cable_tie" }) else { return }
-        overlayWindowController?.catScene.spawnToy(item)
+        guard let item = items.first(where: { $0.id == "cable_tie" }) else {
+            NSLog("Ramona debug: no cable_tie ItemDefinition found in \(items.map(\.id)) - Items/*.json didn't load it")
+            return
+        }
+        guard let scene = overlayWindowController?.catScene else {
+            NSLog("Ramona debug: overlayWindowController/catScene is nil - can't spawn (RAMONA_HIDDEN=1?)")
+            return
+        }
+        scene.spawnToy(item)
         behaviorEngine?.setToyAvailable(true)
     }
 

@@ -213,7 +213,30 @@ final class CatScene: SKScene {
         debugLabel.isHidden = !visible
     }
 
+    /// Cached from the last apply() call so spawnToy/despawnToy can refresh
+    /// just the toy line without waiting for BehaviorEngine's next
+    /// action/mood notification (which may not fire for a while - see
+    /// BehaviorEngine's flourishChance).
+    private var lastDebugAction: CatAction = .idle
+    private var lastDebugMood: Mood = .content
+    private var lastDebugNeeds: NeedsState = .full
+
     private func updateDebugText(action: CatAction, mood: Mood, needs: NeedsState) {
+        lastDebugAction = action
+        lastDebugMood = mood
+        lastDebugNeeds = needs
+        renderDebugText()
+    }
+
+    /// Refreshes just the toy line's live state (position/surface/rest)
+    /// using the last-cached action/mood/needs, without waiting for
+    /// BehaviorEngine's next action/mood notification - spawnToy/despawnToy
+    /// call this directly since neither one itself changes the action.
+    private func refreshDebugText() {
+        renderDebugText()
+    }
+
+    private func renderDebugText() {
         let surfaceText: String
         switch currentSurface {
         case .floor: surfaceText = "floor"
@@ -236,8 +259,8 @@ final class CatScene: SKScene {
         }
         debugLabel.text = String(
             format: "action: %@\nsurface: %@\nmood: %@\nhunger: %.2f\nenergy: %.2f\nplay: %.2f\nsocial: %.2f\nplayDrive: %.2f\n%@",
-            String(describing: action), surfaceText, String(describing: mood),
-            needs.hunger, needs.energy, needs.play, needs.social, needs.playDrive, toyText
+            String(describing: lastDebugAction), surfaceText, String(describing: lastDebugMood),
+            lastDebugNeeds.hunger, lastDebugNeeds.energy, lastDebugNeeds.play, lastDebugNeeds.social, lastDebugNeeds.playDrive, toyText
         )
     }
 
@@ -398,11 +421,13 @@ final class CatScene: SKScene {
         let newToy = ToyNode(item: item, at: CGPoint(x: spawnX, y: groundY), surface: currentSurface)
         toy = newToy
         addChild(newToy.node)
+        refreshDebugText()
     }
 
     func despawnToy() {
         toy?.node.removeFromParent()
         toy = nil
+        refreshDebugText()
     }
 
     /// Per-frame toy physics resolution, called after SpriteKit's own
