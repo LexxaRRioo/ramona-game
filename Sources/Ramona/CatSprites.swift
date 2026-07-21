@@ -87,29 +87,51 @@ enum CatSprites {
     static let walkLeft = CatClip(textures: frames(row: 4, cols: 0..<6), timePerFrame: 0.11, loops: true)
     /// Faces right; the sheet ships this as its own row rather than a flip.
     static let walkRight = CatClip(textures: frames(row: 5, cols: 0..<6), timePerFrame: 0.11, loops: true)
-    /// Front-facing sit-down settle - plays once as she comes to rest, then
-    /// hands off to sitIdle's breathing loop (both are the same front-sit pose
-    /// family, so they connect without a pop).
+    /// Front-facing settle pose, played once as she comes to rest before
+    /// handing off to sitIdle's breathing loop (both are the same front-sit
+    /// pose family, so they connect without a pop). Per the pack's labeled
+    /// reference sheet this is actually "Yawn (sit, front)", not a sit-down
+    /// motion - she's sitting still throughout and just yawns - but it reads
+    /// fine as a settle-in beat, so it's kept for that role.
     static let sitDown = CatClip(textures: frames(row: 43, cols: 0..<7), timePerFrame: 0.09, loops: false)
     /// Front-facing sitting idle - a gentle breathing loop, what she does when
     /// she's just hanging out and not walking anywhere.
     static let sitIdle = CatClip(textures: frames(row: 19, cols: 0..<5), timePerFrame: 0.28, loops: true)
-    /// Measured directly off the sheet (lowest opaque pixel row per frame,
-    /// cols 0-9 of row 6): 45,45,45,45,44,44,41,41,40,40, vs. the walk/sit
-    /// baseline's 47. Converted to anchorPoint.y fractions (1 - bottomRow/64)
-    /// - she curls up over the transition and the empty space below her
-    /// grows from ~2px to ~7px, so the anchor has to climb to match.
-    static let lieDownGroundAnchors: [CGFloat?] = [0.297, 0.297, 0.297, 0.297, 0.3125, 0.3125, 0.3594, 0.3594, 0.375, 0.375]
-    /// Lie-down-and-curl transition (row 6, cols 0–9: loaf → flatten → curl;
-    /// cols 10–13 are a run cycle sharing the row, excluded) - plays once as
-    /// she settles down to sleep.
-    static let lieDown = CatClip(textures: frames(row: 6, cols: 0..<10), timePerFrame: 0.10, loops: false, groundAnchors: lieDownGroundAnchors)
+    /// Side-facing sit statics (row 0, cols 2/3 - "Sit (left)"/"Sit (right)"
+    /// on the reference sheet) - used when she stops right after walking, so
+    /// she settles facing the direction she was headed instead of always
+    /// snapping to the front-facing sitDown/sitIdle pair.
+    static let sitLeft = CatClip(textures: [frame(row: 0, col: 2)], timePerFrame: 1, loops: false)
+    static let sitRight = CatClip(textures: [frame(row: 0, col: 3)], timePerFrame: 1, loops: false)
+    /// Row 6's 10 lie-down/curl frames (cols 0-9) mix two different curl
+    /// directions rather than forming one continuous transition: cols 0-3
+    /// (sit-down-into-loaf) face right, cols 4-6 flip to facing left, and
+    /// cols 7-9 (the tightly curled ball) alternate right/left/right frame
+    /// to frame. Playing all 10 in order visibly flips her mid-settle.
+    /// Fixed by filtering to two internally-consistent frame sets - one per
+    /// side, in original column order - and picking a side at random each
+    /// time she settles down to sleep, instead of playing the mixed
+    /// original sequence. Ground anchors are per-column measurements
+    /// (lowest opaque pixel row per frame, converted via 1 - bottomRow/64),
+    /// reused unchanged from the original per-column table since filtering
+    /// doesn't change any individual frame's geometry.
+    static let lieDownRightGroundAnchors: [CGFloat?] = [0.297, 0.297, 0.297, 0.297, 0.3594, 0.375]
+    static let lieDownRight = CatClip(
+        textures: [0, 1, 2, 3, 7, 9].map { frame(row: 6, col: $0) },
+        timePerFrame: 0.10, loops: false, groundAnchors: lieDownRightGroundAnchors
+    )
+    static let lieDownLeftGroundAnchors: [CGFloat?] = [0.3125, 0.3125, 0.3594, 0.375]
+    static let lieDownLeft = CatClip(
+        textures: [4, 5, 6, 8].map { frame(row: 6, col: $0) },
+        timePerFrame: 0.10, loops: false, groundAnchors: lieDownLeftGroundAnchors
+    )
     /// The final curled pose, held static - the adjacent row-6 frames differ
     /// too much to loop (they read as the cat rotating), so sleep holds this
     /// one frame and CatScene layers a gentle vertical "breath" scale over it.
-    /// groundAnchors carries the same col-9 anchor as lieDown's last frame,
-    /// so there's no pop at the hand-off.
-    static let sleep = CatClip(textures: frames(row: 6, cols: 9..<10), timePerFrame: 1, loops: false, groundAnchors: [0.375])
+    /// groundAnchors matches the corresponding lieDown clip's last frame, so
+    /// there's no pop at the hand-off.
+    static let sleepRight = CatClip(textures: [frame(row: 6, col: 9)], timePerFrame: 1, loops: false, groundAnchors: [0.375])
+    static let sleepLeft = CatClip(textures: [frame(row: 6, col: 8)], timePerFrame: 1, loops: false, groundAnchors: [0.375])
     /// Front-facing self-grooming (row 12, paw wipes across the face/cheek) -
     /// "cleans herself", a content resting activity she does between walks.
     /// Row 17 looks similar at a glance but the paw raises well above her
@@ -118,6 +140,13 @@ enum CatSprites {
     /// loopPause holds her still between wash cycles instead of an unbroken
     /// loop - felt too frantic/continuous otherwise.
     static let groom = CatClip(textures: frames(row: 12, cols: 0..<8), timePerFrame: 0.12, loops: true, loopPause: 1.2)
+    /// Lying self-grooming (row 13, "Lick paw lie front") - the same wash
+    /// motion as `groom`, for when she grooms right after waking rather than
+    /// sitting up first. Measured bottom row is 45-46 across all 8 frames vs.
+    /// the walk/sit baseline's 47 (she's lying, so sits a hair lower in the
+    /// cell) - small and uniform enough for one shared anchor rather than a
+    /// per-frame table.
+    static let groomLying = CatClip(textures: frames(row: 13, cols: 0..<8), timePerFrame: 0.12, loops: true, groundAnchors: [CGFloat?](repeating: 0.29, count: 8), loopPause: 1.2)
     /// Measured off the sheet (rows 10/11, cols 0-4): frame 1 is a mid-leap
     /// pose whose lowest opaque pixel is row 42, 5px above the walk/sit/other-
     /// run-frames baseline (row 47) - every other frame in the cycle already
@@ -135,4 +164,9 @@ enum CatSprites {
     /// grooming (the paw raising above her head reads as a wave at a glance)
     /// and used as `groom` in 0.1.2; reassigned once the real label turned up.
     static let scratch = CatClip(textures: frames(row: 17, cols: 0..<8), timePerFrame: 0.12, loops: true)
+    /// Startled hiss crouch (rows 60/61, "Hiss (front, left/right)", first
+    /// frame only) - held while she's being dragged, instead of freezing on
+    /// whatever frame she happened to be on when picked up.
+    static let heldLeft = CatClip(textures: [frame(row: 60, col: 0)], timePerFrame: 1, loops: false)
+    static let heldRight = CatClip(textures: [frame(row: 61, col: 0)], timePerFrame: 1, loops: false)
 }

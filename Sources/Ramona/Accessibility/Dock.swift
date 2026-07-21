@@ -11,6 +11,16 @@ import ApplicationServices
 /// draws into a single full-screen backing window, so the window list never
 /// exposes the strip's real bounds - only the Dock's AXList child does.
 enum Dock {
+    /// The Dock's AXList frame consistently reports ~5pt more height than the
+    /// strip's actual rendered top edge (measured via screenshot pixel-
+    /// sampling against the live frame - the reported box's top few points
+    /// sit in empty space above the visible glass, not on it, so she looked
+    /// like she was standing in front of the Dock instead of on it). Likely
+    /// headroom AX reserves for the icon hover/bounce animation. Subtracted
+    /// from the reported height so groundBounds' ground line lands on the
+    /// strip's real top pixel.
+    private static let topPaddingCorrection: CGFloat = 5
+
     /// The Dock strip's frame in Cocoa (bottom-left origin) coordinates, or nil
     /// when the Dock is auto-hidden, on a side edge, or Accessibility isn't
     /// granted yet - callers then fall back to the screen-bottom floor.
@@ -38,7 +48,7 @@ enum Dock {
             // edge; anything tall (side Dock) or slid off-screen (auto-hidden)
             // isn't something she can walk on.
             guard frame.width > frame.height, frame.minY >= 0, frame.maxY < screenHeight * 0.5 else { continue }
-            return frame
+            return CGRect(x: frame.minX, y: frame.minY, width: frame.width, height: frame.height - topPaddingCorrection)
         }
         return nil
     }

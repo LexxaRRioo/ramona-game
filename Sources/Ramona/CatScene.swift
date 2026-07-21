@@ -47,6 +47,15 @@ final class CatScene: SKScene {
     private var dockSurface: CGRect?
     private var currentSurface: Surface = .floor
     private var currentAction: CatAction = .walk
+    /// currentAction from just before the most recent apply() call - lets a
+    /// case pick a different clip depending on what she was doing right
+    /// before (e.g. groom vs. groomLying depending on whether she just woke
+    /// up), without needing BehaviorEngine to know about clip-level detail.
+    private var previousAction: CatAction = .walk
+    /// Facing direction from the last walk/climb/seekAttention leg, used to
+    /// pick a directional sit when she stops instead of always snapping to
+    /// the front-facing idle pose.
+    private var lastFacingRight = true
     private var lastStalkTime: TimeInterval = 0
     /// Set by land(on:) so the next apply() doesn't immediately override a
     /// manual drop's surface just because the freshly re-evaluated action
@@ -211,6 +220,7 @@ final class CatScene: SKScene {
         }
         justLanded = false
 
+        previousAction = currentAction
         currentAction = action
         updateMoodTint(mood)
         applyCurrentAction()
@@ -297,6 +307,7 @@ final class CatScene: SKScene {
             }
             isDragging = true
             dragMoved = true
+            playClip(Bool.random() ? CatSprites.heldLeft : CatSprites.heldRight)
         }
 
         setHeld(at: point)
@@ -385,24 +396,41 @@ final class CatScene: SKScene {
             // (floor vs. a window's top edge, chosen in apply(action:...))
             // differs; a distinct climbing animation is a later art thing.
             // Face the way she settles; walkLoop then re-picks per leg.
-            playClip(clampedX >= cat.position.x ? CatSprites.walkRight : CatSprites.walkLeft)
+            lastFacingRight = clampedX >= cat.position.x
+            playClip(lastFacingRight ? CatSprites.walkRight : CatSprites.walkLeft)
             cat.run(.sequence([settle, walkLoop(from: clampedX)]))
         case .idle:
-            // Not going anywhere - she sits down, then sits and breathes.
-            playClip(CatSprites.sitDown, then: CatSprites.sitIdle)
+            if previousAction == .walk || previousAction == .climb || previousAction == .seekAttention {
+                // She just stopped moving - settle facing the direction she
+                // was headed instead of snapping to the front-facing pose.
+                playClip(lastFacingRight ? CatSprites.sitRight : CatSprites.sitLeft)
+            } else {
+                // Wasn't moving beforehand - the ordinary front-facing settle.
+                playClip(CatSprites.sitDown, then: CatSprites.sitIdle)
+            }
             cat.run(settle)
         case .groom:
-            // Sits and cleans herself - a content between-walks rest activity.
-            // A rare chance she scratches instead of washing - same idea as
-            // the sleep flourish, an occasional variant rather than a fixed
-            // routine every time.
-            playClip(Double.random(in: 0..<1) < scratchChance ? CatSprites.scratch : CatSprites.groom)
+            if previousAction == .sleep {
+                // Grooms lying down right after waking, rather than sitting
+                // up first.
+                playClip(CatSprites.groomLying)
+            } else {
+                // Sits and cleans herself - a content between-walks rest
+                // activity. A rare chance she scratches instead of washing -
+                // same idea as the sleep flourish, an occasional variant
+                // rather than a fixed routine every time.
+                playClip(Double.random(in: 0..<1) < scratchChance ? CatSprites.scratch : CatSprites.groom)
+            }
             cat.run(settle)
         case .sleep:
-            // Settles, lies down and curls up, then holds the curl. Breathing
-            // is a gentle vertical scale on its own key (not a frame swap), so
-            // she never appears to rotate while asleep.
-            playClip(CatSprites.lieDown, then: CatSprites.sleep)
+            // Settles, lies down and curls up, then holds the curl. Row 6's
+            // curl frames mix two directions (see CatSprites.lieDownRight/
+            // lieDownLeft) - picking a side fresh each time she settles
+            // (including the periodic re-settle flourish) keeps every
+            // individual settle internally consistent without needing to
+            // remember which side she picked last nap.
+            let curlsRight = Bool.random()
+            playClip(curlsRight ? CatSprites.lieDownRight : CatSprites.lieDownLeft, then: curlsRight ? CatSprites.sleepRight : CatSprites.sleepLeft)
             cat.run(settle)
             // Runs on catVisual, not cat: cat.position is the settle/walk
             // target, and scaling that node too would compound with
@@ -417,7 +445,8 @@ final class CatScene: SKScene {
             // квартиры в другой" when long ignored - a real run/leap cycle
             // (row 10/11), not just a sped-up walk, so it reads as urgent
             // rather than a walk cycle glitching.
-            playClip(clampedX >= cat.position.x ? CatSprites.runRight : CatSprites.runLeft)
+            lastFacingRight = clampedX >= cat.position.x
+            playClip(lastFacingRight ? CatSprites.runRight : CatSprites.runLeft)
             cat.run(.sequence([settle, walkLoop(from: clampedX, speed: walkSpeed * 4, rightClip: CatSprites.runRight, leftClip: CatSprites.runLeft)]))
         }
     }
