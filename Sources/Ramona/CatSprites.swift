@@ -171,6 +171,12 @@ enum CatSprites {
     /// grooming (the paw raising above her head reads as a wave at a glance)
     /// and used as `groom` in 0.1.2; reassigned once the real label turned up.
     static let scratch = CatClip(textures: frames(row: 17, cols: 0..<8), timePerFrame: 0.12, loops: true)
+    /// Front-facing meow (row 14, "Meow sit front") - the rare "sits in a
+    /// far corner and meows" seekAttention variant, in place of the usual
+    /// run/leap across the screen. loopPause is longer than groom's - a
+    /// meow is a quick vocal beat, not continuous motion, so it reads odd
+    /// looping back-to-back with no pause.
+    static let meowSit = CatClip(textures: frames(row: 14, cols: 0..<3), timePerFrame: 0.15, loops: true, loopPause: 2.0)
     /// Startled hiss crouch (rows 60/61, "Hiss (front, left/right)", first
     /// frame only) - held while she's being dragged, instead of freezing on
     /// whatever frame she happened to be on when picked up.

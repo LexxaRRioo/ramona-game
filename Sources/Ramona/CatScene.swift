@@ -49,6 +49,9 @@ final class CatScene: SKScene {
     /// Odds that entering .groom plays the scratch variant instead of the
     /// regular wash - a rare alternative, not a fixed routine.
     private let scratchChance: Double = 0.05
+    /// Odds that entering .seekAttention plays the "sits in a far corner and
+    /// meows" variant instead of the usual run/leap across the screen.
+    private let meowChance: Double = 0.2
 
     /// Cache of the live-tracked frontmost window's frame (Phase 2), kept
     /// up to date regardless of whether she's currently on it - it's what
@@ -78,32 +81,42 @@ final class CatScene: SKScene {
     /// happens to differ from .climb - see apply(action:mood:needs:).
     private var justLanded = false
 
-    /// User clicked-and-released on the cat without dragging past the
-    /// threshold ("приходит если её позвать и мурчит, когда начинаешь её
-    /// гладить").
+    /// Left button, click-and-release ("приходит если её позвать и мурчит,
+    /// когда начинаешь её гладить") or held-and-moved ("cursor-petting") -
+    /// see mouseDown/mouseDragged/mouseUp.
     var onPet: (() -> Void)?
-    /// Fires once a mouseDragged on the cat exceeds the drag threshold.
+    /// Fires once a rightMouseDragged on the cat exceeds the drag threshold.
     /// Return true to allow the pickup to proceed, false to reject it (the
     /// struggle cue plays instead and no drag begins).
     var onHoldRequested: (() -> Bool)?
-    /// Fires on mouseUp after an accepted hold, with the drop point in
+    /// Fires on rightMouseUp after an accepted hold, with the drop point in
     /// screen coordinates - before onHoldEnded, so land(on:) has already
     /// updated the surface by the time the engine resumes and settles her.
     var onDropped: ((CGPoint) -> Void)?
-    /// Fires on mouseUp after an accepted hold.
+    /// Fires on rightMouseUp after an accepted hold.
     var onHoldEnded: (() -> Void)?
 
-    /// True between mouseDown and mouseUp on the cat - OverlayWindow's hover
-    /// poll must not fight an in-progress drag by re-hit-testing against a
-    /// cursor position that's now expected to be outside the hit radius.
+    /// True between mouseDown/mouseUp or rightMouseDown/rightMouseUp on the
+    /// cat - OverlayWindow's hover poll must not fight an in-progress
+    /// interaction by re-hit-testing against a cursor position that's now
+    /// expected to be outside the hit radius.
     private(set) var isInteracting = false
+    /// Set once onPet has fired during the current left-button gesture (a
+    /// cursor-petting drag), so mouseUp doesn't also fire the plain-click pet.
+    private var pettedThisGesture = false
+    /// event.timestamp of the last petPulse fired from mouseDragged - throttles
+    /// cursor-petting to petPulse's own cadence instead of once per mouse-moved
+    /// event, which would spam BehaviorEngine.pet()'s instant social-need
+    /// restore many times a second.
+    private var lastPetPulseTime: TimeInterval = 0
+    private let petPulseCooldown: TimeInterval = 0.3
     private var isDragging = false
     private var dragMoved = false
     private var dragRejected = false
     // Ordinary trackpad/mouse clicks jitter a few points between mouseDown
-    // and mouseUp; too low a threshold here misreads nearly every pet as a
-    // drag (that was the "clicking makes her jump" bug - it wasn't actually
-    // jitter alone, see the comment in mouseDragged).
+    // and mouseUp; too low a threshold here misreads nearly every right-click
+    // as a drag-pickup (that was the "clicking makes her jump" bug - it
+    // wasn't actually jitter alone, see the comment in rightMouseDragged).
     private let dragThreshold: CGFloat = 14
 
     // Debug HUD (Phase 4): needs/mood/action, toggled from the menu bar via
@@ -305,14 +318,44 @@ final class CatScene: SKScene {
         }
     }
 
+    /// Left button: petting only, never pickup - a plain click-release pets
+    /// once, and holding the button down while moving over her ("cursor-
+    /// petting") pets repeatedly instead of picking her up (see
+    /// rightMouseDown for that).
     override func mouseDown(with event: NSEvent) {
+        isInteracting = true
+        pettedThisGesture = false
+    }
+
+    override func mouseDragged(with event: NSEvent) {
+        // Throttled to petPulse's own cadence (0.3s) rather than firing once
+        // per mouse-moved event, which would spam BehaviorEngine.pet()'s
+        // instant social-need restore many times a second.
+        guard event.timestamp - lastPetPulseTime >= petPulseCooldown else { return }
+        lastPetPulseTime = event.timestamp
+        pettedThisGesture = true
+        onPet?()
+        playPetPulse()
+    }
+
+    override func mouseUp(with event: NSEvent) {
+        isInteracting = false
+        guard !pettedThisGesture else { return }
+        onPet?()
+        playPetPulse()
+    }
+
+    /// Right button: pickup and carry, what the left button used to do -
+    /// "Rework mouse interaction" in BACKLOG.md moved pickup off the left
+    /// button (now petting-only) onto the right button instead.
+    override func rightMouseDown(with event: NSEvent) {
         isInteracting = true
         isDragging = false
         dragMoved = false
         dragRejected = false
     }
 
-    override func mouseDragged(with event: NSEvent) {
+    override func rightMouseDragged(with event: NSEvent) {
         guard !dragRejected else { return }
         // NSEvent.location(in:) uses its own AppKit<->SpriteKit conversion,
         // separate from (and untested against) the NSEvent.mouseLocation
@@ -336,16 +379,13 @@ final class CatScene: SKScene {
         setHeld(at: point)
     }
 
-    override func mouseUp(with event: NSEvent) {
-        defer { isInteracting = false }
+    override func rightMouseUp(with event: NSEvent) {
+        isInteracting = false
 
         if isDragging {
             isDragging = false
             onDropped?(NSEvent.mouseLocation)
             onHoldEnded?()
-        } else if !dragMoved && !dragRejected {
-            onPet?()
-            playPetPulse()
         }
     }
 
@@ -512,13 +552,19 @@ final class CatScene: SKScene {
                 .scaleY(to: 1.0, duration: 1.8)
             ])), withKey: "breath")
         case .seekAttention:
-            // "Может в два раза быстрее обычного пробегать из одного угла
-            // квартиры в другой" when long ignored - a real run/leap cycle
-            // (row 10/11), not just a sped-up walk, so it reads as urgent
-            // rather than a walk cycle glitching.
-            lastFacingRight = clampedX >= cat.position.x
-            playClip(lastFacingRight ? CatSprites.runRight : CatSprites.runLeft)
-            cat.run(.sequence([settle, walkLoop(from: clampedX, speed: walkSpeed * 4, rightClip: CatSprites.runRight, leftClip: CatSprites.runLeft)]))
+            if Double.random(in: 0..<1) < meowChance {
+                // Rare variant: stays put and meows instead of pacing.
+                playClip(CatSprites.meowSit)
+                cat.run(settle)
+            } else {
+                // "Может в два раза быстрее обычного пробегать из одного угла
+                // квартиры в другой" when long ignored - a real run/leap cycle
+                // (row 10/11), not just a sped-up walk, so it reads as urgent
+                // rather than a walk cycle glitching.
+                lastFacingRight = clampedX >= cat.position.x
+                playClip(lastFacingRight ? CatSprites.runRight : CatSprites.runLeft)
+                cat.run(.sequence([settle, walkLoop(from: clampedX, speed: walkSpeed * 4, rightClip: CatSprites.runRight, leftClip: CatSprites.runLeft)]))
+            }
         }
     }
 
